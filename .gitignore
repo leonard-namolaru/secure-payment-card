@@ -1,0 +1,39 @@
+SecurePaymentCardServer/HELP.md
+SecurePaymentCardServer/target/
+SecurePaymentCardServer/.mvn/wrapper/maven-wrapper.jar
+!SecurePaymentCardServer/**/src/main/**/target/
+!SecurePaymentCardServer/**/src/test/**/target/
+
+SecurePaymentCardClient/bin
+
+SecurePaymentCard/bin
+SecurePaymentCard/deliverables
+SecurePaymentCard/configurations
+
+### .env ###
+SecurePaymentCardClient/.env
+SecurePaymentCardServer/.env
+SecurePaymentCardServer/*.pkrvars.hcl
+
+### Eclipse ###
+.metadata
+SecurePaymentCardClient/.project
+SecurePaymentCardClient/.classpath
+SecurePaymentCardClient/.settings
+
+SecurePaymentCard/.gen
+SecurePaymentCard/.javacard_project
+SecurePaymentCard/.project
+SecurePaymentCard/.classpath
+SecurePaymentCard/.settings
+SecurePaymentCard/.factorypath
+
+### IntelliJ IDEA ###
+SecurePaymentCardServer/.idea
+SecurePaymentCardServer/*.iws
+SecurePaymentCardServer/*.iml
+SecurePaymentCardServer/*.ipr
+
+### VS Code ###
+.vscode/
+
