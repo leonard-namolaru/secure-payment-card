@@ -1,1 +1,2 @@
-# secure-payment-card
+# Secure Payment Card
+Projet en cours de développement.
