@@ -1,7 +1,8 @@
 package secure.payment.card.client;
 
-import java.math.BigInteger;
+import java.util.HexFormat;
 import java.security.Signature;
+
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 import com.oracle.javacard.ams.AMService;
@@ -15,9 +16,27 @@ public final class Util {
 	private Util() {}
 	
 	public static String bytesToHex(byte[] bytes) {
-	    return new BigInteger(1, bytes).toString(16);
+	    HexFormat hexFormat = HexFormat.of();
+	    return hexFormat.formatHex(bytes);
 	}
 	
+	public static byte[] hexToBytes(String hex) {
+	    HexFormat hexFormat = HexFormat.of();
+	    return hexFormat.parseHex(hex);
+	}
+	
+	public static short bytesToShort(byte[] bytes) {
+		String hex = bytesToHex(bytes);
+		return Short.parseShort(hex, 16);
+	}
+
+	public static byte[] shortToBytes(short shortValue) {
+	    byte[] bytes = new byte[Short.BYTES];
+	    bytes[0] = (byte) (shortValue >> 8);
+	    bytes[1] = (byte) shortValue;
+		return bytes;
+	}
+
 	public static byte[] concatArrays(byte[] array1, byte[] array2) {
 		byte[] newArray = new byte[array1.length + array2.length];
 		

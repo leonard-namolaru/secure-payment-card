@@ -1,16 +1,13 @@
 package secure.payment.card.client;
 
-import java.util.Scanner;
-
 import javax.smartcardio.CardChannel;
-
 import com.oracle.javacard.ams.AMSession;
-public class ClientTerminalInterface extends ClientUserInterface {
-	Scanner scanner;
-	
-	public ClientTerminalInterface(Scanner scanner, CardChannel cardChannel, ServerCommunicationChannel serverCommunicationChannel, boolean debug) {
-		super(cardChannel, serverCommunicationChannel, debug);
-		this.scanner = scanner;
+
+import secure.payment.card.client.HttpPayload.AuthenticationRequest;
+
+public class ClientTerminalInterface extends ClientUserInterface {	
+	public ClientTerminalInterface(CardChannel cardChannel, ServerCommunicationChannel serverCommunicationChannel, boolean debug, boolean verbose) {
+		super(cardChannel, serverCommunicationChannel, debug, verbose);
 	}
 
 	@Override
@@ -30,7 +27,7 @@ public class ClientTerminalInterface extends ClientUserInterface {
 			System.out.println("4 - Fin");
 			
 			System.out.print("Votre choix : ");
-			userChoice = scanner.nextByte();
+			userChoice = SecurePaymentCardClient.scanner.nextByte();
 
 			switch (userChoice) {
 				case 1: System.out.println("\n");
@@ -76,6 +73,7 @@ public class ClientTerminalInterface extends ClientUserInterface {
 						sendMessageToUserIfDebug("Uninstall");
 						sendMessageToUserIfDebug("Unload");
 						cardCommunicationChannel.undeploy(applicationManagementService);
+						sessionUserInterface = null;
 						break;
 						
 				case 4 : break;
@@ -88,7 +86,7 @@ public class ClientTerminalInterface extends ClientUserInterface {
 
 	@Override
 	protected SessionUserInterface startSession() {
-		sessionUserInterface = new SessionTerminalInterface(scanner, cardCommunicationChannel, serverCommunicationChannel, debug);
+		sessionUserInterface = new SessionTerminalInterface(cardCommunicationChannel, serverCommunicationChannel, debug, verbose);
 		return sessionUserInterface;
 	}
 
@@ -117,5 +115,25 @@ public class ClientTerminalInterface extends ClientUserInterface {
 		if (debug) {
 			sendMessageToUser(message);
 		}
+	}
+	
+	@Override
+	public void sendMessageToUserIfVerbose(String message) {
+		if (verbose) {
+			sendMessageToUser(message);
+		}
+	}
+
+	@Override
+	protected AuthenticationRequest createServerAuthenticationRequestObject() {
+		AuthenticationRequest authenticationRequest = null;
+		
+		String email = System.getenv("SUPER_ADMIN_EMAIL");
+		String password = System.getenv("SUPER_ADMIN_PASSWORD");
+		if (email != null && password != null) {
+			authenticationRequest = new AuthenticationRequest(email, password);
+		}
+		
+		return authenticationRequest;
 	}
 }

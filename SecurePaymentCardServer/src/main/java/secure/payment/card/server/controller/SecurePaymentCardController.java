@@ -21,8 +21,9 @@ public class SecurePaymentCardController {
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/{uuid}")
     @PreAuthorize("hasAnyRole('SECURE_PAYMENT_CARD_AGENT','SECURE_PAYMENT_CARD_ADMIN')")
-    public SecurePaymentCard getSecurePaymentCardById(@PathVariable String uuid) {
-        return securePaymentCardService.getSecurePaymentCardByID(uuid);
+    public SecurePaymentCardRecord getSecurePaymentCardById(@PathVariable String uuid) {
+        SecurePaymentCard securePaymentCard = securePaymentCardService.getSecurePaymentCardByID(uuid);
+        return new SecurePaymentCardRecord(securePaymentCard.getPublicKey(), securePaymentCard.getBalanceSignature());
     }
 
     @ResponseStatus(HttpStatus.CREATED)

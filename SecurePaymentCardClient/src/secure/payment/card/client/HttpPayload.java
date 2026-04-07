@@ -60,7 +60,6 @@ public class HttpPayload {
 	    }
 	}
 	
-
 	public static class SecurePaymentCardRecord extends AbstractHttpPayload {
 		public String publicKey;
 	    public String balanceSignature;
@@ -107,5 +106,20 @@ public class HttpPayload {
 	    	return String.format("%s: %s", message, description);
 	    }
 	}
-
+	
+	public static class OperationResult extends AbstractHttpPayload {
+	    public String message;
+	    
+	    public OperationResult() {
+	    	
+	    }
+	    
+	    public OperationResult(String message) {
+	    	this.message = message;
+	    }
+	    
+	    public boolean isOk() {
+	    	return message.equalsIgnoreCase("La mise à jour a réussi.");
+	    }
+	}
 }

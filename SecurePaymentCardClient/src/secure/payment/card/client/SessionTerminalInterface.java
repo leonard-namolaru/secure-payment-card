@@ -1,14 +1,11 @@
 package secure.payment.card.client;
 
-import java.util.Scanner;
 import javax.smartcardio.ResponseAPDU;
 
 public class SessionTerminalInterface extends SessionUserInterface {
-	Scanner scanner;
 
-	public SessionTerminalInterface(Scanner scanner, CardCommunicationChannel cardCommunicationChannel, ServerCommunicationChannel serverCommunicationChannel, boolean debug) {
-		super(cardCommunicationChannel, serverCommunicationChannel, debug);
-		this.scanner = scanner;
+	public SessionTerminalInterface(CardCommunicationChannel cardCommunicationChannel, ServerCommunicationChannel serverCommunicationChannel, boolean debug, boolean verbose) {
+		super(cardCommunicationChannel, serverCommunicationChannel, debug, verbose);
 	}
 
 	@Override
@@ -25,7 +22,7 @@ public class SessionTerminalInterface extends SessionUserInterface {
 			System.out.println("4 - Fin");
 			
 			System.out.print("Votre choix : ");
-			userChoice = scanner.nextByte();
+			userChoice = SecurePaymentCardClient.scanner.nextByte();
 
 			ResponseAPDU response;
 			switch (userChoice) {
@@ -35,20 +32,25 @@ public class SessionTerminalInterface extends SessionUserInterface {
 						response = cardCommunicationChannel.getBalance();
 						System.out.println(Util.convertResponseStatusCodeToString(response, false));
 						if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-							System.out.println("Signature ? " + Crypto.verifySignature(cardSignatureObject, response, 2));
+							System.out.println("Signature ? " + Crypto.verifyResponseApduSignature(cardSignatureObject, response, 2));
 						}
+						
+						byte[] balanceBytes = Crypto.getPlainTextAssociatedWithSignature(response, 2);
+						System.out.println("Solde : " + Util.bytesToShort(balanceBytes));
+						
 						break;
 						
 				case 2: System.out.println("\n");
 						System.out.println("DÉBITER LA CARTE");
 						System.out.println("=============================================");
 						System.out.print("Montant : ");
-						int debitValue = scanner.nextByte();
+						int debitValue = SecurePaymentCardClient.scanner.nextByte();
 						response = cardCommunicationChannel.debit((byte) debitValue, antiReplayAttacksCounter ,serverSignatureObject);
 						antiReplayAttacksCounter++; 
 						System.out.println(Util.convertResponseStatusCodeToString(response, false));
 						if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-							System.out.println("Signature ? " + Crypto.verifySignature(cardSignatureObject, response, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2));
+							System.out.println("Signature ? " + Crypto.verifyResponseApduSignature(cardSignatureObject, response, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2));
+							updateBalanceAfterDebit((byte) debitValue);
 						}
 						break;
 						
@@ -56,12 +58,13 @@ public class SessionTerminalInterface extends SessionUserInterface {
 						System.out.println("RECHARGER LA CARTE");
 						System.out.println("=============================================");
 						System.out.print("Montant : ");
-						int creditValue = scanner.nextByte();
+						int creditValue = SecurePaymentCardClient.scanner.nextByte();
 						response = cardCommunicationChannel.credit((byte) creditValue, antiReplayAttacksCounter ,serverSignatureObject);
 						antiReplayAttacksCounter++; 
 						System.out.println(Util.convertResponseStatusCodeToString(response, false));
 						if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-							System.out.println("Signature ? " + Crypto.verifySignature(cardSignatureObject, response, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2));
+							System.out.println("Signature ? " + Crypto.verifyResponseApduSignature(cardSignatureObject, response, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2));
+							updateBalanceAfterCredit((byte) creditValue);
 						}
 						break;
 						
@@ -89,4 +92,12 @@ public class SessionTerminalInterface extends SessionUserInterface {
 			sendMessageToUser(message);
 		}
 	}
+	
+	@Override
+	public void sendMessageToUserIfVerbose(String message) {
+		if (verbose) {
+			sendMessageToUser(message);
+		}
+	}
+
 }

@@ -9,6 +9,8 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class SecurePaymentCardClient {
 	
+	public static final Scanner scanner = new Scanner(System.in); 		
+	
 	public static final String sAID_CAP = "aid:1b45afcde9";
 	public static final String isdAID = "aid:A000000151000000";
 	public static final String sAID_AppletClass = "aid:1b45afcde912646c";
@@ -23,18 +25,18 @@ public class SecurePaymentCardClient {
 	public static void main(String[] args) {
 		final String BASE_URL = "http://localhost:8080";
 		final String HOST = "localhost";
+		final boolean VERBOSE = true;
 		final boolean DEBUG = true;
 		final int PORT = 9025;
 	
 		ServerCommunicationChannel serverCommunicationChannel = new ServerCommunicationChannel(BASE_URL);
-		Scanner scanner = new Scanner(System.in); 		
 		cmdArgs = args;
 		
 		JavaCardClient client = new JavaCardClient(HOST, PORT);
 		CardChannel cardChannel = client.getCardChannel();
 
 		Security.addProvider(new BouncyCastleProvider());		
-		ClientTerminalInterface clientTerminalInterface = new ClientTerminalInterface(scanner, cardChannel, serverCommunicationChannel, DEBUG);
+		ClientTerminalInterface clientTerminalInterface = new ClientTerminalInterface(cardChannel, serverCommunicationChannel, DEBUG, VERBOSE);
 		clientTerminalInterface.sendMessageToUserIfDebug(Util.getAtrFormattedString(client.getATR()));
 		clientTerminalInterface.run();
 				

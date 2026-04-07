@@ -22,6 +22,7 @@ import secure.payment.card.client.HttpPayload.AuthenticationRequest;
 import secure.payment.card.client.HttpPayload.AuthenticationResponse;
 import secure.payment.card.client.HttpPayload.SecurePaymentCardRecord;
 import secure.payment.card.client.HttpPayload.HttpResponseBodyUnionType;
+import secure.payment.card.client.HttpPayload.OperationResult;
 import secure.payment.card.client.HttpPayload.SecurePaymentCardCreationResponse;
 
 public class ServerCommunicationChannel {
@@ -32,17 +33,31 @@ public class ServerCommunicationChannel {
 	public enum HttpMethodEnum {GET, POST, PUT}
 	
 	public ServerCommunicationChannel(String baseUrl) {
+		this.accessToken = "";
 		this.baseUrl = baseUrl;
 		this.httpClient = HttpClient.newHttpClient();
-		
-		HttpResponseBodyUnionType<AuthenticationResponse> authenticationResponse = handleHttpRequest("/auth", HttpMethodEnum.POST, 
-				new AuthenticationRequest(System.getenv("SUPER_ADMIN_EMAIL"), System.getenv("SUPER_ADMIN_PASSWORD")), new AuthenticationResponse(), false);
-		if (!authenticationResponse.isError()) {
-			this.accessToken = authenticationResponse.getExpectedResponseBody().token;
-		} else {
-			System.out.println(authenticationResponse.getErrorResponse());
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
-		}
+	}
+	
+	public void setAccessToken(String accessToken) {
+		this.accessToken = accessToken;
+	}
+	
+	public HttpResponseBodyUnionType<AuthenticationResponse> authentication(AuthenticationRequest authenticationRequest) {    	
+    	return handleHttpRequest("/auth", HttpMethodEnum.POST, authenticationRequest, new AuthenticationResponse(), true);
+	}
+	
+	public HttpResponseBodyUnionType<OperationResult> updateSecurePaymentCardRecord(String securePayementCardID, byte[] publicKey, byte[] balanceSignature) {
+		String path = String.format("/api/v1/%s", securePayementCardID);
+    	String publicKeyHex = Util.bytesToHex(publicKey);
+    	String balanceSignatureHex = Util.bytesToHex(balanceSignature);
+    	SecurePaymentCardRecord securePaymentCardRecord = new SecurePaymentCardRecord(publicKeyHex, balanceSignatureHex);
+
+    	return handleHttpRequest(path, HttpMethodEnum.PUT, securePaymentCardRecord, new OperationResult(), true);
+	}
+	
+	public HttpResponseBodyUnionType<SecurePaymentCardRecord> getSecurePaymentCardRecord(String securePayementCardID) {
+		String path = String.format("/api/v1/%s", securePayementCardID);
+    	return handleHttpRequest(path, HttpMethodEnum.GET, null, new SecurePaymentCardRecord(), true);
 	}
 	
 	public HttpResponseBodyUnionType<SecurePaymentCardCreationResponse> sendSecurePaymentCardRecord(byte[] publicKey, byte[] balanceSignature) {

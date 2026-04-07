@@ -1,27 +1,26 @@
 package secure.payment.card.client;
 
 import java.math.BigInteger;
-import java.security.AlgorithmParameters;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
-import java.security.KeyFactory;
+import javax.smartcardio.ResponseAPDU;
+import org.bouncycastle.jce.ECPointUtil;
+
 import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
 import java.security.Signature;
-import java.security.SignatureException;
-import java.security.interfaces.ECPrivateKey;
-import java.security.interfaces.ECPublicKey;
-import java.security.spec.ECGenParameterSpec;
-import java.security.spec.ECParameterSpec;
+import java.security.KeyFactory;
 import java.security.spec.ECPoint;
+import java.security.KeyPairGenerator;
+import java.security.SignatureException;
+import java.security.AlgorithmParameters;
+import java.security.InvalidKeyException;
 import java.security.spec.ECPublicKeySpec;
+import java.security.spec.ECParameterSpec;
+import java.security.interfaces.ECPublicKey;
+import java.security.interfaces.ECPrivateKey;
+import java.security.spec.ECGenParameterSpec;
+import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.InvalidParameterSpecException;
-
-import javax.smartcardio.ResponseAPDU;
-
-import org.bouncycastle.jce.ECPointUtil;
+import java.security.InvalidAlgorithmParameterException;
 
 /**
  * Cryptographie
@@ -39,8 +38,17 @@ public final class Crypto {
 		byte[] byteArray = new byte[65];
 		
 		byteArray[0] = 0x04;
-		System.arraycopy(xBytes, xBytes[0] == 0x00 ? 1 : 0, byteArray, 1, 32);
-		System.arraycopy(yBytes, yBytes[0] == 0x00 ? 1 : 0, byteArray, 33, 32);
+		
+		try {
+			System.arraycopy(xBytes, xBytes[0] == 0x00 ? 1 : 0, byteArray, 1, 32);
+			System.arraycopy(yBytes, yBytes[0] == 0x00 ? 1 : 0, byteArray, 33, 32);
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.out.println(Util.bytesToHex(xBytes));
+			System.out.println(Util.bytesToHex(yBytes));
+			System.out.println(e.getMessage());
+			System.out.println(Util.bytesToHex(byteArray));
+		}
 		
 		return byteArray;
 	}
@@ -86,10 +94,13 @@ public final class Crypto {
 		return signature;
 	}
 	
-	public static boolean verifySignature(Signature signatureObject, ResponseAPDU response, int signatureOffset) {
+	public static boolean verifyResponseApduSignature(Signature signatureObject, ResponseAPDU response, int signatureOffset) {
 		byte[] plainText = getPlainTextAssociatedWithSignature(response, signatureOffset);
 		byte[] signature = getDerEncodedSignature(response, signatureOffset);
-		
+	     return verifySignature(signatureObject, plainText, signature);
+	}
+	
+	public static boolean verifySignature(Signature signatureObject, byte[] plainText, byte[] signature) {		
 		boolean isValid = false;
 	      try {
 			signatureObject.update(plainText);
@@ -105,6 +116,7 @@ public final class Crypto {
 	     
 	     return isValid;
 	}
+
 	
 	public static ECPublicKey getPublicKeyFromByteArray(byte[] publicKeyByteArray) {	
 		ECPublicKey ecPublicKey = null;
@@ -246,7 +258,7 @@ public final class Crypto {
 		return signatureObject;
 	}
 	
-	public static boolean serverSignatureInitSign(Signature signatureObject, ECPrivateKey privateKey) {
+	public static boolean signatureInitSign(Signature signatureObject, ECPrivateKey privateKey) {
 		boolean operationResult = true;
 		
 	    try {
@@ -258,7 +270,7 @@ public final class Crypto {
 	    return operationResult;
 	}
 	
-	public static boolean cardSignatureInitVerify(Signature signatureObject, ECPublicKey publicKey) {
+	public static boolean signatureInitVerify(Signature signatureObject, ECPublicKey publicKey) {
 		boolean operationResult = true;
 		
 	    try {

@@ -9,6 +9,11 @@ import java.security.NoSuchAlgorithmException;
 
 import javax.smartcardio.ResponseAPDU;
 
+import secure.payment.card.client.HttpPayload.AuthenticationResponse;
+import secure.payment.card.client.HttpPayload.HttpResponseBodyUnionType;
+import secure.payment.card.client.HttpPayload.OperationResult;
+import secure.payment.card.client.HttpPayload.SecurePaymentCardRecord;
+
 public abstract class SessionUserInterface implements UserInterface {
     private short balance;
     private byte[] balanceSignature;
@@ -16,6 +21,7 @@ public abstract class SessionUserInterface implements UserInterface {
     protected byte antiReplayAttacksCounter;
     
 	protected boolean debug;
+	protected boolean verbose;
 	private KeyPair serverKeyPair;
 	private ECPublicKey cardPublicKey;
 	protected Signature cardSignatureObject;
@@ -23,8 +29,9 @@ public abstract class SessionUserInterface implements UserInterface {
 	protected CardCommunicationChannel cardCommunicationChannel;
 	protected ServerCommunicationChannel serverCommunicationChannel;
 	
-	public SessionUserInterface(CardCommunicationChannel cardCommunicationChannel, ServerCommunicationChannel serverCommunicationChannel, boolean debug) {
+	public SessionUserInterface(CardCommunicationChannel cardCommunicationChannel, ServerCommunicationChannel serverCommunicationChannel, boolean debug, boolean verbose) {
 		this.debug = debug;
+		this.verbose = verbose;
 		this.antiReplayAttacksCounter = 0;
 		this.cardCommunicationChannel = cardCommunicationChannel;
 		this.serverCommunicationChannel = serverCommunicationChannel;
@@ -32,27 +39,27 @@ public abstract class SessionUserInterface implements UserInterface {
 		this.cardSignatureObject = Crypto.setSignatureAlgorithm();
 		this.serverSignatureObject = Crypto.setSignatureAlgorithm();
 		if (cardSignatureObject == null || serverSignatureObject == null) {
-			System.out.println("Signature.getInstance : Une erreur inattendue s'est produite.");
+			sendMessageToUser("Crypto.setSignatureAlgorithm() : Une erreur inattendue s'est produite.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
 		sendMessageToUserIfDebug("Select applet");
 		if (!selectApplet()) {
-			System.out.println("Une erreur inattendue s'est produite.");
+			sendMessageToUser("Une erreur inattendue s'est produite.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
 		sendMessageToUserIfDebug("Verify user pin");
 		byte[] pin = this.getUserPin();
 		if (!verifyUserPin(pin)) {
-			System.out.println("getUserPin() : Une erreur inattendue s'est produite.");
+			sendMessageToUser("getUserPin() : Une erreur inattendue s'est produite.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
 		sendMessageToUserIfDebug("Get card public key");
 		this.cardPublicKey = getCardPublicKey();
 		if (cardPublicKey == null) {
-			System.out.println("getCardPublicKey() : Une erreur inattendue s'est produite.");
+			sendMessageToUser("getCardPublicKey() : Une erreur inattendue s'est produite.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
@@ -60,17 +67,17 @@ public abstract class SessionUserInterface implements UserInterface {
 		
 		sendMessageToUserIfDebug("Send server public key");
 		if(!sendServerPublicKey()) {
-			System.out.println("sendServerPublicKey() : Une erreur inattendue s'est produite.");
+			sendMessageToUser("sendServerPublicKey() : Une erreur inattendue s'est produite.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
-		if(!Crypto.cardSignatureInitVerify(cardSignatureObject, cardPublicKey)) {
-			System.out.println("cardSignatureInitVerify() : Une erreur inattendue s'est produite.");
+		if(!Crypto.signatureInitVerify(cardSignatureObject, cardPublicKey)) {
+			sendMessageToUser("cardSignatureInitVerify() : Une erreur inattendue s'est produite.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 
-		if(!Crypto.serverSignatureInitSign(serverSignatureObject, (ECPrivateKey) serverKeyPair.getPrivate())) {
-			System.out.println("serverSignatureInitSign() : Une erreur inattendue s'est produite.");
+		if(!Crypto.signatureInitSign(serverSignatureObject, (ECPrivateKey) serverKeyPair.getPrivate())) {
+			sendMessageToUser("serverSignatureInitSign() : Une erreur inattendue s'est produite.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
@@ -82,7 +89,11 @@ public abstract class SessionUserInterface implements UserInterface {
 		}
 		
 		this.securePayementCardID = new String(securePayementCardIdBytes);
-		sendMessageToUser(String.format("\nID : %s", securePayementCardID));
+		sendMessageToUser(String.format("\nID : %s\n", securePayementCardID));
+		
+		if (!setAndVerifyInitialBalance()) {
+			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+		}
 	}
 	
 	private boolean selectApplet() {
@@ -145,9 +156,100 @@ public abstract class SessionUserInterface implements UserInterface {
 		} 
 		return securePayementCardID;
 	}
+	
+	private SecurePaymentCardRecord getSecurePayementCardDataFromServer() {
+		sendMessageToUserIfVerbose("Obtention de la signature du dernier solde, "
+				+ "ainsi que de la clé publique, auprès du serveur ...");
+		
+		HttpResponseBodyUnionType<SecurePaymentCardRecord> httpResponse = 
+				serverCommunicationChannel.getSecurePaymentCardRecord(securePayementCardID);
+		if (!httpResponse.isError()) {
+			return httpResponse.getExpectedResponseBody();
+		} else {
+			sendMessageToUserIfVerbose("L'opération a échoué.");
+			sendMessageToUser(httpResponse.getErrorResponse().toString());
+			return null;
+		}
+	}
+	
+	private boolean updateSecurePayementCardData() {
+		sendMessageToUserIfVerbose("Mise à jour de la signature du solde, "
+				+ "ainsi que de la clé publique, auprès du serveur ...");
+		
+		byte[] publicKey = Crypto.getByteArrayFromPublicKey((ECPublicKey) serverKeyPair.getPublic());
+		HttpResponseBodyUnionType<OperationResult> httpResponse = 
+				serverCommunicationChannel.updateSecurePaymentCardRecord(securePayementCardID, publicKey, balanceSignature);
+		if (!httpResponse.isError()) {
+			return httpResponse.getExpectedResponseBody().isOk();
+		} else {
+			sendMessageToUserIfVerbose("L'opération a échoué.");
+			sendMessageToUser(httpResponse.getErrorResponse().toString());
+			return false;
+		}
+	}
+	
+	private boolean setAndVerifyInitialBalance() {
+		boolean operationResult = true;
+
+		SecurePaymentCardRecord securePaymentCardRecord = getSecurePayementCardDataFromServer();
+		if (securePaymentCardRecord == null) {
+			operationResult = false;
+			sendMessageToUser("Le contrôle d'intégrité du solde de la carte n'a pas pu être effectué.");
+		} else {
+			this.balanceSignature = Util.hexToBytes(securePaymentCardRecord.balanceSignature);
+			ECPublicKey publicKey = Crypto.getPublicKeyFromByteArray(Util.hexToBytes(securePaymentCardRecord.publicKey));
+			
+			Signature signatureObject = Crypto.setSignatureAlgorithm();
+			if (signatureObject == null) {
+				operationResult = false;
+				sendMessageToUser("Le contrôle d'intégrité du solde de la carte n'a pas pu être effectué.");
+			} else {
+				if (!Crypto.signatureInitVerify(signatureObject, publicKey)) {
+					operationResult = false;
+					sendMessageToUser("Le contrôle d'intégrité du solde de la carte n'a pas pu être effectué.");
+				} else {
+					ResponseAPDU response = cardCommunicationChannel.getBalance();
+					if (response.getSW() != CardCommunicationChannel.STATUS_OK) {
+						operationResult = false;
+						sendMessageToUser("Impossible d'obtenir le solde de la carte.");
+					} else {
+						byte[] balanceBytes = Crypto.getPlainTextAssociatedWithSignature(response, 2);
+						this.balance = Util.bytesToShort(balanceBytes);
+						if (!Crypto.verifySignature(signatureObject, balanceBytes, balanceSignature)) {
+							operationResult = false;
+							sendMessageToUser("Problème d'intégrité concernant le solde de la carte.");
+						} else {
+							sendMessageToUserIfVerbose("La vérification de l'intégrité du montant stocké "
+									+ "sur la carte a été effectuée avec succès.");
+						}
+					}
+				}
+			}
+		}
+
+		return operationResult;
+	}
+	
+	private void signBalance() {
+		byte[] balanceBytes = Util.shortToBytes(balance);
+		this.balanceSignature = Crypto.signMessage(serverSignatureObject, balanceBytes);
+	}
+	
+	protected boolean updateBalanceAfterDebit(byte debitAmount) {
+		balance = (short) (balance - debitAmount);
+		signBalance();
+		return updateSecurePayementCardData();
+	}
+
+	protected boolean updateBalanceAfterCredit(byte creditAmount) {
+		balance = (short) (balance + creditAmount);
+		signBalance();
+		return updateSecurePayementCardData();
+	}
 
 	protected abstract void run();
 	protected abstract byte[] getUserPin();
 	public abstract void sendMessageToUser(String message);
 	public abstract void sendMessageToUserIfDebug(String message);
+	public abstract void sendMessageToUserIfVerbose(String message);
 }
