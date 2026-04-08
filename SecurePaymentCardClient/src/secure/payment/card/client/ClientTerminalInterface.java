@@ -1,22 +1,15 @@
 package secure.payment.card.client;
 
-import javax.smartcardio.CardChannel;
-import com.oracle.javacard.ams.AMSession;
-
 import secure.payment.card.client.HttpPayload.AuthenticationRequest;
 
 public class ClientTerminalInterface extends ClientUserInterface {	
-	public ClientTerminalInterface(CardChannel cardChannel, ServerCommunicationChannel serverCommunicationChannel, boolean debug, boolean verbose) {
-		super(cardChannel, serverCommunicationChannel, debug, verbose);
+	public ClientTerminalInterface(String serverBaseUrl, String host, int port, boolean debug, boolean verbose) {
+		super(serverBaseUrl, host, port, debug, verbose);
 	}
 
 	@Override
 	protected void run() {
-		byte[] pin;
 		int userChoice;
-		String capFilePath = " ";
-		String propertiesFilePath = " ";
-		
 		do {
 			System.out.println("\n");
 			System.out.println("MENU");
@@ -33,47 +26,19 @@ public class ClientTerminalInterface extends ClientUserInterface {
 				case 1: System.out.println("\n");
 						System.out.println("DÉPLOYER");
 						System.out.println("=============================================");
-						if (applicationManagementService == null) {
-							propertiesFilePath = getPropertiesFilePath();
-							applicationManagementService = initApplicationManagementService(propertiesFilePath);
-						}
-						
-						pin = getUserPin();
-						capFilePath = getCapFilePath();
-						
-						String securePayementCardID = registerNewSecurePayementCard();
-						if (securePayementCardID == null) {
-							sendMessageToUser("Une erreur de communication avec le serveur a empêché l'enregistrement de la nouvelle carte.");
-							break;
-						}
-						
-						AMSession deployObject = createDeployObject(SecurePaymentCardClient.sAID_CAP, capFilePath, pin, securePayementCardID);
-						
-						sendMessageToUserIfDebug("Install");
-						cardCommunicationChannel.deploy(deployObject);
+						deploy();
 						break;
 						
 				case 2: System.out.println("\n");
 						System.out.println("DÉMARRAGE / REPRISE D'UNE SESSION");
 						System.out.println("=============================================");
-						if (sessionUserInterface == null) {
-							startSession();
-						}
-						sessionUserInterface.run();
+						startOrResumeSession();
 						break;
 						
 				case 3: System.out.println("\n");
 						System.out.println("DÉSINSTALLER");
 						System.out.println("=============================================");
-						if (applicationManagementService == null) {
-							propertiesFilePath = getPropertiesFilePath();
-							applicationManagementService = initApplicationManagementService(propertiesFilePath);
-						}
-						
-						sendMessageToUserIfDebug("Uninstall");
-						sendMessageToUserIfDebug("Unload");
-						cardCommunicationChannel.undeploy(applicationManagementService);
-						sessionUserInterface = null;
+						uninstall();
 						break;
 						
 				case 4 : break;
@@ -82,6 +47,7 @@ public class ClientTerminalInterface extends ClientUserInterface {
 			
 		} while (userChoice != 4);
 		
+		disconnect();
 	}
 
 	@Override

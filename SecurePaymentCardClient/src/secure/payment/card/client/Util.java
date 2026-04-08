@@ -100,11 +100,6 @@ public final class Util {
 		return String.format("[%1$tF %1$tT %1$tL %1$tZ] [APDU-R] [%2$s] SW:%3$04X", 
 				System.currentTimeMillis(), convertByteArrayToString(responseAPDU.getData()), responseAPDU.getSW());
 	}
-
-	// ATR : Answer To Reset
-	public static String getAtrFormattedString(byte[] ATR) {
-		return String.format("ATR: [%s]", convertByteArrayToString(ATR));
-	}
 	
 	public static String getArg(String[] args, String argName, String defaultValue) {
 		String value = defaultValue;

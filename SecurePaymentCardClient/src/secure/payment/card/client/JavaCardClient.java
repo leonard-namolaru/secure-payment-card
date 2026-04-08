@@ -13,6 +13,7 @@ import javax.smartcardio.TerminalFactory;
 
 public class JavaCardClient {
 	private Card card;
+	UserInterface userInterface;
 	private CardChannel cardChannel;
 	private CardTerminal cardTerminal;
 	private InetSocketAddress inetSocketAddress;
@@ -30,41 +31,44 @@ public class JavaCardClient {
 		try {
 			card.disconnect(true);
 		} catch (CardException e) {
+			userInterface.sendMessageToUserIfDebug(String.format("disconnect(), CardException : %s", e.getMessage()));
 			result = false;
 		}
 		
 		return result;
 	}
 	
-	public JavaCardClient(String host, int port) {
+	public JavaCardClient(String host, int port, UserInterface userInterface) {
+		this.userInterface = userInterface;
+		
 		this.inetSocketAddress = connectHost(host, port);
 		if (inetSocketAddress == null) {
-			System.out.println("connectHost : Une erreur inattendue s'est produite.");
+			this.userInterface.sendMessageToUser("La connexion a échoué");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
 		this.cardTerminal = getCardTerminal();
 		if (cardTerminal == null) {
-			System.out.println("cardTerminal : La connexion a échoué.");
+			this.userInterface.sendMessageToUser("La connexion a échoué.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
 		if (waitForCardPresent(10000)) {
-			System.out.println("Connexion établie : " + cardTerminal.getName());
+			this.userInterface.sendMessageToUserIfVerbose(String.format("Connexion établie : %s", cardTerminal.getName()));
 		} else {
-			System.out.println("La connexion a échoué");
+			this.userInterface.sendMessageToUser("La connexion a échoué (timeout)");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
 		}
 		
 		this.card = connectCard();
 		if (card == null) {
-			System.out.println("La connexion a échoué.");
+			this.userInterface.sendMessageToUser("La connexion a échoué.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 
 		this.cardChannel = getCardBasicChannel();
 		if (cardChannel == null) {
-			System.out.println("La connexion a échoué.");
+			this.userInterface.sendMessageToUser("La connexion a échoué.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 	}
@@ -75,7 +79,8 @@ public class JavaCardClient {
 		try {
 			inetSocketAddress = new InetSocketAddress(host, port);
 		} catch (SecurityException e) {
-			System.out.println("InetSocketAddress : Une erreur inattendue s'est produite.");
+			userInterface.sendMessageToUser("Une erreur inattendue s'est produite.");
+			userInterface.sendMessageToUserIfDebug(String.format("connectHost(), SecurityException : %s", e.getMessage()));
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
@@ -93,10 +98,12 @@ public class JavaCardClient {
 			terminalFactory = TerminalFactory.getInstance("SocketCardTerminalFactoryType",  
 					List.of(inetSocketAddress), "SocketCardTerminalProvider");
 		} catch (NoSuchAlgorithmException e) {
-			System.out.println("TerminalFactory.getInstance NoSuchAlgorithmException : Une erreur inattendue s'est produite.");
+			userInterface.sendMessageToUser("Une erreur inattendue s'est produite.");
+			userInterface.sendMessageToUserIfDebug(String.format("getCardTerminal(), NoSuchAlgorithmException : %s", e.getMessage()));
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		} catch (NoSuchProviderException e) {
-			System.out.println("TerminalFactory.getInstance NoSuchProviderException : Une erreur inattendue s'est produite.");
+			userInterface.sendMessageToUser("Une erreur inattendue s'est produite.");
+			userInterface.sendMessageToUserIfDebug(String.format("getCardTerminal(), NoSuchProviderException : %s", e.getMessage()));
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 	        
@@ -104,7 +111,8 @@ public class JavaCardClient {
 		try {
 			terminals = terminalFactory.terminals().list();
 		} catch (CardException e) {
-			System.out.println("Une erreur inattendue s'est produite.");
+			userInterface.sendMessageToUser("Une erreur inattendue s'est produite.");
+			userInterface.sendMessageToUserIfDebug(String.format("getCardTerminal(), CardException : %s", e.getMessage()));
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 	        
@@ -117,7 +125,7 @@ public class JavaCardClient {
 	}
 	
 	private boolean waitForCardPresent(long timeout) {
-		System.out.println("Connexion en cours ...");
+		userInterface.sendMessageToUserIfVerbose("Connexion en cours ...");
 		
 		boolean result = true;
 		try {
@@ -125,7 +133,8 @@ public class JavaCardClient {
 				result = false;
 			}
 		} catch (CardException e) {
-			System.out.println("La connexion a échoué");
+			userInterface.sendMessageToUser("La connexion a échoué");
+			userInterface.sendMessageToUserIfDebug(String.format("waitForCardPresent(), SecurityException : %s", e.getMessage()));
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
 		}
 		
@@ -137,6 +146,7 @@ public class JavaCardClient {
 		try {
 			card = cardTerminal.connect("*");
 		} catch (CardException e) {
+			userInterface.sendMessageToUserIfDebug(String.format("connectCard(), CardException : %s", e.getMessage()));
 			card = null;
 		}
 		
@@ -148,6 +158,7 @@ public class JavaCardClient {
 		try {
 			cardChannel = card.getBasicChannel();
 		} catch (SecurityException e) {
+			userInterface.sendMessageToUserIfDebug(String.format("getCardBasicChannel(), SecurityException : %s", e.getMessage()));
 			cardChannel = null;
 		}
 				

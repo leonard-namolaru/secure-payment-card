@@ -28,13 +28,15 @@ import secure.payment.card.client.HttpPayload.SecurePaymentCardCreationResponse;
 public class ServerCommunicationChannel {
 	private String baseUrl;
 	private String accessToken;
+	UserInterface userInterface;
 	private HttpClient httpClient;
 	
 	public enum HttpMethodEnum {GET, POST, PUT}
 	
-	public ServerCommunicationChannel(String baseUrl) {
+	public ServerCommunicationChannel(String baseUrl, UserInterface userInterface) {
 		this.accessToken = "";
 		this.baseUrl = baseUrl;
+		this.userInterface = userInterface;
 		this.httpClient = HttpClient.newHttpClient();
 	}
 	
@@ -70,7 +72,8 @@ public class ServerCommunicationChannel {
 	
 	public <T extends AbstractHttpPayload, G extends AbstractHttpPayload> HttpResponseBodyUnionType<G> handleHttpRequest
 	(String path, HttpMethodEnum httpMethod, T requestPayload, G expectedResponsePayloadClass, boolean useAccessToken) {
-		
+		userInterface.sendMessageToUserIfDebug(String.format("Requête HTTP : %s", baseUrl + path));
+
         Builder requestBuilder = HttpRequest.newBuilder();
         requestBuilder.uri(URI.create(baseUrl + path));
         requestBuilder.timeout(Duration.of(10, ChronoUnit.SECONDS));
@@ -86,13 +89,15 @@ public class ServerCommunicationChannel {
 			GsonBuilder httpRequestGsonBuilder = new GsonBuilder();			
 			Object object = Util.createNewObjectInstanceByTypeName(requestPayload.getClass().getTypeName());
 			if (object == null) {
-				System.out.println("");
+				userInterface.sendMessageToUser("Une erreur inattendue s'est produite.");
+				userInterface.sendMessageToUserIfDebug(String.format("Impossible d'obtenir le constructeur de la classe %s.", requestPayload.getClass().getTypeName()));
 				System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
 			}
 			
 			Gson httpRequestGson = httpRequestGsonBuilder.registerTypeAdapter(requestPayload.getClass(), object).create();
 	    	requestBody = httpRequestGson.toJson(requestPayload);
-	    	System.out.println(requestBody);
+	    	
+			userInterface.sendMessageToUserIfDebug(String.format("Payload de la requête HTTP : %s", requestBody));
 		} 
         
 		switch (httpMethod) {
@@ -109,13 +114,13 @@ public class ServerCommunicationChannel {
 		try {
 			response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 		} catch (HttpTimeoutException e) {
-			System.out.println("HttpTimeoutException : " + e.getMessage());
+			userInterface.sendMessageToUserIfDebug(String.format("handleHttpRequest(), HttpTimeoutException : %s", e.getMessage()));
 			response = null;
 		} catch (IOException e) { 
-			System.out.println("IOException : " + e.getMessage() + " " + e.getCause());
+			userInterface.sendMessageToUserIfDebug(String.format("handleHttpRequest(), IOException : %s", e.getMessage()));
 			response = null;
 		} catch (InterruptedException e) {
-			System.out.println("InterruptedException : " + e.getMessage());
+			userInterface.sendMessageToUserIfDebug(String.format("handleHttpRequest(), InterruptedException : %s", e.getMessage()));
 			response = null;
 		} 
 		
@@ -133,26 +138,27 @@ public class ServerCommunicationChannel {
 				type = expectedResponsePayloadClass.getClass();
 				typeAdapter = Util.createNewObjectInstanceByTypeName(expectedResponsePayloadClass.getClass().getTypeName());
 			} else {
-				System.out.println("");
+				userInterface.sendMessageToUser("La réponse à la requête HTTP contient un code d'état inattendu.");
 				System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
 			}
 			
 			if (typeAdapter == null) {
-				System.out.println("");
+				userInterface.sendMessageToUser("Une erreur inattendue s'est produite.");
+				userInterface.sendMessageToUserIfDebug(String.format("Impossible d'obtenir le constructeur de la classe %s.", expectedResponsePayloadClass.getClass().getTypeName()));
 				System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
 			}
 
 			Gson httpResponseGson = null;
 			httpResponseGson = httpResponseGsonBuilder.registerTypeAdapter(type, typeAdapter).create();
 
-			System.out.println(response.body());
-			
+			userInterface.sendMessageToUserIfDebug(String.format("Réponse à la requête HTTP : %s", response.body()));
+
 			HttpResponseBodyUnionType<G> httpResponseBodyUnionType = new HttpResponseBodyUnionType<>();
 			Object httpResponseBody = null;
 			try {
 				httpResponseBody = httpResponseGson.fromJson(response.body(), type);
 			} catch (JsonSyntaxException e) {
-				System.out.println("");
+				userInterface.sendMessageToUserIfDebug(String.format("handleHttpRequest(), JsonSyntaxException : %s", e.getMessage()));
 				System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
 			}
 

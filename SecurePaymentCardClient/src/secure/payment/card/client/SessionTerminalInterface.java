@@ -1,7 +1,5 @@
 package secure.payment.card.client;
 
-import javax.smartcardio.ResponseAPDU;
-
 public class SessionTerminalInterface extends SessionUserInterface {
 
 	public SessionTerminalInterface(CardCommunicationChannel cardCommunicationChannel, ServerCommunicationChannel serverCommunicationChannel, boolean debug, boolean verbose) {
@@ -24,20 +22,11 @@ public class SessionTerminalInterface extends SessionUserInterface {
 			System.out.print("Votre choix : ");
 			userChoice = SecurePaymentCardClient.scanner.nextByte();
 
-			ResponseAPDU response;
 			switch (userChoice) {
 				case 1: System.out.println("\n");
 						System.out.println("CONSULTATION DU SOLDE DE LA CARTE");
 						System.out.println("=============================================");
-						response = cardCommunicationChannel.getBalance();
-						System.out.println(Util.convertResponseStatusCodeToString(response, false));
-						if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-							System.out.println("Signature ? " + Crypto.verifyResponseApduSignature(cardSignatureObject, response, 2));
-						}
-						
-						byte[] balanceBytes = Crypto.getPlainTextAssociatedWithSignature(response, 2);
-						System.out.println("Solde : " + Util.bytesToShort(balanceBytes));
-						
+						getBalance();
 						break;
 						
 				case 2: System.out.println("\n");
@@ -45,13 +34,7 @@ public class SessionTerminalInterface extends SessionUserInterface {
 						System.out.println("=============================================");
 						System.out.print("Montant : ");
 						int debitValue = SecurePaymentCardClient.scanner.nextByte();
-						response = cardCommunicationChannel.debit((byte) debitValue, antiReplayAttacksCounter ,serverSignatureObject);
-						antiReplayAttacksCounter++; 
-						System.out.println(Util.convertResponseStatusCodeToString(response, false));
-						if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-							System.out.println("Signature ? " + Crypto.verifyResponseApduSignature(cardSignatureObject, response, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2));
-							updateBalanceAfterDebit((byte) debitValue);
-						}
+						debit((byte) debitValue);
 						break;
 						
 				case 3: System.out.println("\n");
@@ -59,17 +42,11 @@ public class SessionTerminalInterface extends SessionUserInterface {
 						System.out.println("=============================================");
 						System.out.print("Montant : ");
 						int creditValue = SecurePaymentCardClient.scanner.nextByte();
-						response = cardCommunicationChannel.credit((byte) creditValue, antiReplayAttacksCounter ,serverSignatureObject);
-						antiReplayAttacksCounter++; 
-						System.out.println(Util.convertResponseStatusCodeToString(response, false));
-						if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-							System.out.println("Signature ? " + Crypto.verifyResponseApduSignature(cardSignatureObject, response, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2));
-							updateBalanceAfterCredit((byte) creditValue);
-						}
+						credit((byte) creditValue);
 						break;
 						
-				case 4 : System.out.println(".");
-						 break;
+				case 4 : 
+					    break;
 				default: System.out.println("Valeur invalide");
 			}
 			
@@ -99,5 +76,4 @@ public class SessionTerminalInterface extends SessionUserInterface {
 			sendMessageToUser(message);
 		}
 	}
-
 }
