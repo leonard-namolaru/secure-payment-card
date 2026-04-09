@@ -11,9 +11,11 @@ import javacard.framework.ISOException;
 import javacard.framework.SystemException;
 import javacard.framework.TransactionException;
 
+import javacard.security.AESKey;
 import javacard.security.KeyPair;
 import javacard.security.Signature;
 import javacard.security.KeyBuilder;
+import javacard.security.KeyAgreement;
 import javacard.security.XECPublicKey;
 import javacard.security.XECPrivateKey;
 import javacard.security.MessageDigest;
@@ -24,25 +26,30 @@ import javacardx.crypto.Cipher;
 import javacardx.security.util.MonotonicCounter;
 
 public class SecurePaymentCard extends Applet {
+	private AESKey aesKey;
+	private Cipher aesCipherDecryptObject;
+	private Cipher aesCipherEncryptObject;
+	
     private short balance;
     private byte[] balanceSignature;
     private final OwnerPIN ownerPin;
-    private final KeyPair cardKeyPair;
     private byte[] securePayementCardID;
+    private final KeyPair cardSigKeyPair;
     private final Signature cardSignature;
-    private final Signature serverSignature;
+    private final Signature clientSignature;
     private final Signature cardSignatureCheck;
-    private final XECPublicKey serverPublicKey;
+    private final XECPublicKey clientSigPublicKey;
     private final MonotonicCounter antiReplayAttacksCounter;
 
     private SecurePaymentCard(OwnerPIN ownerPin, MonotonicCounter antiReplayAttacksCounter, Signature cardSignature, Signature serverSignature, 
     		Signature cardSignatureCheck, KeyPair cardKeyPair, XECPublicKey serverPublicKey, short initialBalance, byte[] securePayementCardID) { 
+    	this.aesKey = null;
     	this.ownerPin = ownerPin;
     	this.balance = initialBalance;
-    	this.cardKeyPair = cardKeyPair;
+    	this.cardSigKeyPair = cardKeyPair;
     	this.cardSignature = cardSignature;
-    	this.serverSignature = serverSignature;
-    	this.serverPublicKey = serverPublicKey;
+    	this.clientSignature = serverSignature;
+    	this.clientSigPublicKey = serverPublicKey;
     	this.cardSignatureCheck = cardSignatureCheck;
     	this.securePayementCardID = securePayementCardID;
     	this.antiReplayAttacksCounter = antiReplayAttacksCounter;
@@ -63,7 +70,7 @@ public class SecurePaymentCard extends Applet {
         		namedParameterSpec, (short) (KeyBuilder.ATTR_PRIVATE | JCSystem.MEMORY_TYPE_TRANSIENT_RESET), false);
         XECPublicKey cardPublicKey = (XECPublicKey) KeyBuilder.buildXECKey(namedParameterSpec, 
         		(short) (KeyBuilder.ATTR_PUBLIC | JCSystem.MEMORY_TYPE_PERSISTENT), false);
-        XECPublicKey serverPublicKey = (XECPublicKey) KeyBuilder.buildXECKey(namedParameterSpec, 
+        XECPublicKey clientPublicKey = (XECPublicKey) KeyBuilder.buildXECKey(namedParameterSpec, 
         		(short) (KeyBuilder.ATTR_PUBLIC | JCSystem.MEMORY_TYPE_TRANSIENT_RESET), false);
         
         Signature cardSignature = Signature.getInstance(MessageDigest.ALG_SHA_256, Signature.SIG_CIPHER_ECDSA_PLAIN, Cipher.PAD_NULL, false);
@@ -87,7 +94,7 @@ public class SecurePaymentCard extends Applet {
         Util.arrayCopy(installParameters, (short) (appletDataLengthOffset + 1 + SecurePaymentCardConstants.PIN_SIZE), securePayementCardID, (short) 0, (short) securePayementCardIdLength);
         
         SecurePaymentCard securePaymentCard = new SecurePaymentCard(pin, counter, cardSignature, serverSignature, 
-    			cardSignatureCheck, keyPair, serverPublicKey, (short) 0, securePayementCardID);
+    			cardSignatureCheck, keyPair, clientPublicKey, (short) 0, securePayementCardID);
     	securePaymentCard.register();	
     }
     
@@ -113,7 +120,7 @@ public class SecurePaymentCard extends Applet {
     @Override
     public boolean select() {
         try {
-        	cardSignatureCheck.init(cardKeyPair.getPublic(), Signature.MODE_VERIFY);
+        	cardSignatureCheck.init(cardSigKeyPair.getPublic(), Signature.MODE_VERIFY);
         } catch(CryptoException e) {
             ISOException.throwIt(SecurePaymentCardConstants.SW_KEY_GENERATION_FAILED);
         }
@@ -197,14 +204,17 @@ public class SecurePaymentCard extends Applet {
             	case SecurePaymentCardConstants.INS_VERIFY_PIN:
             		verifyPin(incomingApduCommand);
             		break;
-            	case SecurePaymentCardConstants.INS_GET_PUBLIC_KEY:
+            	case SecurePaymentCardConstants.INS_GET_SIG_PUBLIC_KEY:
             		sendCardPublicKey(incomingApduCommand);
             		break; 
-            	case SecurePaymentCardConstants.INS_PUT_PUBLIC_KEY:
-            		getServerPublicKey(incomingApduCommand);
+            	case SecurePaymentCardConstants.INS_PUT_SIG_PUBLIC_KEY:
+            		getClientPublicKey(incomingApduCommand);
             		break; 
             	case SecurePaymentCardConstants.INS_GET_PAYEMENT_CARD_ID:
             		sendSecurePayementCardID(incomingApduCommand);
+            		break; 
+            	case SecurePaymentCardConstants.INS_KEY_AGREEMENT:
+            		keyAgreement(incomingApduCommand);
             		break; 
             	default:
             		ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
@@ -218,12 +228,50 @@ public class SecurePaymentCard extends Applet {
         } catch (TransactionException exception) {
             ISOException.throwIt((short) (SecurePaymentCardConstants.SW_TRANSACTION_EXCEPTION_PREFIX | exception.getReason()));
         }
-}
+     }
+    
+    private void keyAgreement(APDU apdu) { 
+        NamedParameterSpec namedParameterSpec = NamedParameterSpec.getInstance(NamedParameterSpec.SECP256R1); // secp256r1 curve
+        XECPrivateKey cardPrivateKey = (XECPrivateKey) KeyBuilder.buildXECKey(
+        		namedParameterSpec, (short) (KeyBuilder.ATTR_PRIVATE | JCSystem.MEMORY_TYPE_TRANSIENT_RESET), false);
+        XECPublicKey cardPublicKey = (XECPublicKey) KeyBuilder.buildXECKey(namedParameterSpec, 
+        		(short) (KeyBuilder.ATTR_PUBLIC | JCSystem.MEMORY_TYPE_TRANSIENT_RESET), false);
+        XECPublicKey clientPublicKey = (XECPublicKey) KeyBuilder.buildXECKey(namedParameterSpec, 
+        		(short) (KeyBuilder.ATTR_PUBLIC | JCSystem.MEMORY_TYPE_TRANSIENT_RESET), false);
+
+        KeyPair keyPair = new KeyPair(cardPublicKey, cardPrivateKey);
+        keyPair.genKeyPair();
         
-    private void credit(APDU incomingApduCommand, byte[] apduBufferByteArray) {
+        KeyAgreement keyAgreement = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH_PLAIN, false);
+        keyAgreement.init(keyPair.getPrivate());
+        
+        byte[] buffer = apdu.getBuffer();
+        byte byteRead = (byte) (apdu.setIncomingAndReceive());
+        clientPublicKey.setEncoded(buffer, ISO7816.OFFSET_CDATA, byteRead);
+        
+        byte[] secret = new byte[32];
+        byte[] publicKeyBytes = new byte[clientPublicKey.getEncodingLength()];
+        short publicKeyBytesLength = clientPublicKey.getEncoded(publicKeyBytes, (short) 0);
+        
+        // short generateSecret​(byte[] publicData, short publicOffset, short publicLength, byte[] secret, short secretOffset)
+        keyAgreement.generateSecret(publicKeyBytes, (short) 0, (short) publicKeyBytesLength, secret, (short)0);
+
+		this.aesKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, false);
+		this.aesKey.setKey(secret,(short) 16);
+		
+		this.aesCipherEncryptObject = Cipher.getInstance(Cipher.ALG_AES_ECB_PKCS5, false);
+		this.aesCipherEncryptObject.init(this.aesKey, Cipher.MODE_ENCRYPT);
+		
+		this.aesCipherDecryptObject = Cipher.getInstance(Cipher.ALG_AES_ECB_PKCS5, false);
+		this.aesCipherDecryptObject.init(this.aesKey, Cipher.MODE_DECRYPT);
+
+        short copiedDataOffsetAndLength = cardPublicKey.getEncoded(apdu.getBuffer(), (short) 0);
+        apdu.setOutgoingAndSend((short) 0, copiedDataOffsetAndLength);
+    }
+    
+    private byte handleIncomingApduData(APDU incomingApduCommand, byte[] apduBufferByteArray) {   
     	byte[] expectedCounterValue = new byte[SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE];
     	antiReplayAttacksCounter.get(expectedCounterValue, (short) 0);
-
         antiReplayAttacksCounter.incrementBy((short) 1);
 
     	// L'octet Lc désigne le nombre d'octets dans le champ data de la commande APDU  
@@ -236,18 +284,27 @@ public class SecurePaymentCard extends Applet {
         if (numBytes != byteRead) {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
-
-        byte creditAmount = apduBufferByteArray[ISO7816.OFFSET_CDATA];
-        byte clientCounterValue = apduBufferByteArray[ISO7816.OFFSET_CDATA + 1];
         
+        byte[] tmpBuffer = new byte[byteRead];
+    	// short doFinal​(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset)
+    	short outputLength = aesCipherDecryptObject.doFinal(apduBufferByteArray, ISO7816.OFFSET_CDATA, byteRead, tmpBuffer, (short) 0);
+
+        byte creditAmount = tmpBuffer[0];
+        byte clientCounterValue = tmpBuffer[1];
+
         if (clientCounterValue != expectedCounterValue[SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE - 1]) {
             ISOException.throwIt((short) 1);
         }
 
-        if (!verifySignature(apduBufferByteArray, (short) 2, (short) (byteRead - 2))) {
+        if (!verifySignature2(tmpBuffer, (short) 2, (short) (outputLength - 2))) {
             ISOException.throwIt((short) 2);
         }
-    	
+    	return creditAmount;
+    }
+
+    
+    private void credit(APDU incomingApduCommand, byte[] apduBufferByteArray) {
+    	byte creditAmount = handleIncomingApduData(incomingApduCommand, apduBufferByteArray);
         if (((creditAmount & 0xFF) > SecurePaymentCardConstants.MAX_TRANSACTION) || (creditAmount < 0)) {
             TransactionException.throwIt(SecurePaymentCardConstants.SW_INVALID_TRANSACTION);
         }
@@ -261,7 +318,7 @@ public class SecurePaymentCard extends Applet {
    	 	signBalance();
         JCSystem.commitTransaction();
 
-        short offset = generateResponseBuffer(creditAmount, apduBufferByteArray, (short) 0, true);
+        short offset = generateResponseBuffer(creditAmount, apduBufferByteArray, true);
         incomingApduCommand.setOutgoingAndSend((short) 0, offset);
     }
     
@@ -306,12 +363,12 @@ public class SecurePaymentCard extends Applet {
    	 	signBalance();
         JCSystem.commitTransaction();
 
-        short offset = generateResponseBuffer(debitAmount, apduBufferByteArray, (short) 0, true);
+        short offset = generateResponseBuffer(debitAmount, apduBufferByteArray, true);
         incomingApduCommand.setOutgoingAndSend((short) 0, offset);
     }
 
     private void getBalance(APDU incomingApduCommand, byte[] apduBufferByteArray) {
-        short offset = generateResponseBuffer(balance, apduBufferByteArray, (short) 0, false);
+        short offset = generateResponseBuffer(balance, apduBufferByteArray, false);
         incomingApduCommand.setOutgoingAndSend((short) 0, offset);
     }
     
@@ -329,14 +386,14 @@ public class SecurePaymentCard extends Applet {
     }
     
     
-    private void getServerPublicKey(APDU apdu) {
+    private void getClientPublicKey(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
         byte byteRead = (byte) (apdu.setIncomingAndReceive());
         
         try {
         	// void setEncoded​(byte[] value, short offset, short length)
-            serverPublicKey.setEncoded(buffer, ISO7816.OFFSET_CDATA, byteRead);
-            serverSignature.init(serverPublicKey, Signature.MODE_VERIFY);
+            clientSigPublicKey.setEncoded(buffer, ISO7816.OFFSET_CDATA, byteRead);
+            clientSignature.init(clientSigPublicKey, Signature.MODE_VERIFY);
         } catch (CryptoException e) {
             CryptoException.throwIt(SecurePaymentCardConstants.SW_SIGNATURE_INITIALIZATION_FAILED);
         }
@@ -347,10 +404,10 @@ public class SecurePaymentCard extends Applet {
         short copiedDataOffsetAndLength = Util.arrayCopy(securePayementCardID, (short) 0, apdu.getBuffer(), (short) 0, (short) securePayementCardID.length);
         apdu.setOutgoingAndSend((short) 0, copiedDataOffsetAndLength);
     }
-
+    
     private void sendCardPublicKey(APDU apdu) {
         try {
-            XECPublicKey publicKey = (XECPublicKey) cardKeyPair.getPublic();
+            XECPublicKey publicKey = (XECPublicKey) cardSigKeyPair.getPublic();
             short copiedDataOffsetAndLength = publicKey.getEncoded(apdu.getBuffer(), (short) 0);
             apdu.setOutgoingAndSend((short) 0, copiedDataOffsetAndLength);
         } catch(Exception e) {
@@ -358,8 +415,8 @@ public class SecurePaymentCard extends Applet {
         }
     }
 
-    private short generateResponseBuffer(short value, byte[] output, short offset, boolean includeCounter) {
-        short position = offset;
+    private short generateResponseBuffer(short value, byte[] output, boolean includeCounter) {
+        short position = 0;
         try {
             // Ecrire la valeur ( + compteur si includeCounter == true)
             position = Util.setShort(output, position, value);
@@ -369,12 +426,20 @@ public class SecurePaymentCard extends Applet {
             }
             
             // Une vue en lecture seule sur les données d'entrée à signer
-            byte[] signInputData = JCSystem.makeByteArrayView(output, offset, (short) (position - offset), JCSystem.ATTR_READABLE_VIEW, null);
+            byte[] signInputData = JCSystem.makeByteArrayView(output, (short) 0, (short) position, JCSystem.ATTR_READABLE_VIEW, null);
             // Une vue en écriture seule sur la mémoire tampon de sortie où la signature doit être stockée
-            byte[] signBuffer = JCSystem.makeByteArrayView(output, position, (short) (output.length - position), JCSystem.ATTR_WRITABLE_VIEW, null);
-
+            byte[] signBuffer = JCSystem.makeByteArrayView(output, position, (short) (output.length - position), JCSystem.ATTR_WRITABLE_VIEW, null);            
+            
             // Ajout de la signature
             position += sign(signInputData, signBuffer);
+            
+            byte[] tmp = new byte[position];
+            // short arrayCopy(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+            Util.arrayCopy(output, (short) 0, tmp, (short) 0, position);
+            
+        	// short doFinal​(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset)
+        	short outputLength = aesCipherEncryptObject.doFinal(tmp, (short) 0, (short) tmp.length, output, (short) 0);
+        	return outputLength;
         } catch (ArithmeticException | CryptoException | SystemException e) {
             ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         }
@@ -388,14 +453,14 @@ public class SecurePaymentCard extends Applet {
     
     private void genKeyPair() {
     	try {
-            cardKeyPair.genKeyPair();
-    	}  catch(CryptoException e) {
+            cardSigKeyPair.genKeyPair();
+    	} catch(CryptoException e) {
             CryptoException.throwIt(SecurePaymentCardConstants.SW_KEY_GENERATION_FAILED);
         }
     	
         try {
-            cardSignature.init(cardKeyPair.getPrivate(), Signature.MODE_SIGN);
-        	cardSignatureCheck.init(cardKeyPair.getPublic(), Signature.MODE_VERIFY);
+            cardSignature.init(cardSigKeyPair.getPrivate(), Signature.MODE_SIGN);
+        	cardSignatureCheck.init(cardSigKeyPair.getPublic(), Signature.MODE_VERIFY);
         } catch(CryptoException e) {
             CryptoException.throwIt(SecurePaymentCardConstants.SW_SIGNATURE_INITIALIZATION_FAILED);
         }
@@ -413,6 +478,11 @@ public class SecurePaymentCard extends Applet {
 
     private boolean verifySignature(byte[] input, short messageLength, short signatureLength) {
     	// verify​(byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset, short sigLength)
-    	return serverSignature.verify(input, ISO7816.OFFSET_CDATA, messageLength, input, (short) (ISO7816.OFFSET_CDATA + messageLength), signatureLength);
+    	return clientSignature.verify(input, ISO7816.OFFSET_CDATA, messageLength, input, (short) (ISO7816.OFFSET_CDATA + messageLength), signatureLength);
+    }
+    
+    private boolean verifySignature2(byte[] input, short messageLength, short signatureLength) {
+    	// verify​(byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset, short sigLength)
+    	return clientSignature.verify(input, (short) 0, messageLength, input, messageLength, signatureLength);
     }
 }

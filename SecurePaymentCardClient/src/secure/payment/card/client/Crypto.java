@@ -1,6 +1,13 @@
 package secure.payment.card.client;
 
 import java.math.BigInteger;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.KeyAgreement;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.SecretKeySpec;
 import javax.smartcardio.ResponseAPDU;
 import org.bouncycastle.jce.ECPointUtil;
 
@@ -12,14 +19,17 @@ import java.security.KeyPairGenerator;
 import java.security.SignatureException;
 import java.security.AlgorithmParameters;
 import java.security.InvalidKeyException;
+import java.security.Key;
 import java.security.spec.ECPublicKeySpec;
 import java.security.spec.ECParameterSpec;
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.ECPrivateKey;
 import java.security.spec.ECGenParameterSpec;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.InvalidParameterSpecException;
+import java.util.ArrayList;
 import java.security.InvalidAlgorithmParameterException;
 
 /**
@@ -48,6 +58,8 @@ public final class Crypto {
 			System.out.println(Util.bytesToHex(yBytes));
 			System.out.println(e.getMessage());
 			System.out.println(Util.bytesToHex(byteArray));
+			System.out.println(xBytes.length);
+			System.out.println(yBytes.length);
 		}
 		
 		return byteArray;
@@ -94,9 +106,9 @@ public final class Crypto {
 		return signature;
 	}
 	
-	public static boolean verifyResponseApduSignature(Signature signatureObject, ResponseAPDU response, int signatureOffset) {
-		byte[] plainText = getPlainTextAssociatedWithSignature(response, signatureOffset);
-		byte[] signature = getDerEncodedSignature(response, signatureOffset);
+	public static boolean verifyResponseApduSignature(Signature signatureObject, byte[] responseBuffer, int signatureOffset) {
+		byte[] plainText = getPlainTextAssociatedWithSignature(responseBuffer, signatureOffset);
+		byte[] signature = getDerEncodedSignature(responseBuffer, signatureOffset);
 	     return verifySignature(signatureObject, plainText, signature);
 	}
 	
@@ -165,8 +177,7 @@ public final class Crypto {
 		return ecPublicKey;
 	}
 	
-	public static byte[] getPlainTextAssociatedWithSignature(ResponseAPDU response, int signatureOffset) {
-		byte[] responseBuffer = response.getData();
+	public static byte[] getPlainTextAssociatedWithSignature(byte[] responseBuffer, int signatureOffset) {
 		byte[] buffer = new byte[signatureOffset];
 		
 		// void java.lang.System.arraycopy(Object src, int srcPos, Object dest, int destPos, int length)
@@ -208,9 +219,7 @@ public final class Crypto {
 	}
 
 	
-	public static byte[] getDerEncodedSignature(ResponseAPDU response, int signatureOffset) {
-		byte[] responseBuffer = response.getData();
-		
+	public static byte[] getDerEncodedSignature(byte[] responseBuffer, int signatureOffset) {		
 		int responseBufferIndex = signatureOffset;
 		
 		boolean rAbove7f = responseBuffer[signatureOffset] > 0x7F || responseBuffer[signatureOffset] < 0;
@@ -280,5 +289,78 @@ public final class Crypto {
 		}				    
 	      
 	    return operationResult;
+	}
+	
+	public static byte[] generateSharedSecret(ECPublicKey cardPublicKey, PrivateKey privateKey) {
+	    KeyAgreement keyAgreement = null;
+		
+	    try {
+			keyAgreement = KeyAgreement.getInstance("ECDH");
+		} catch (NoSuchAlgorithmException e) {
+			return null;
+		}
+		
+	    try {
+			keyAgreement.init(privateKey);
+		} catch (InvalidKeyException e) {
+			return null;
+		}
+	    
+	    try {
+			keyAgreement.doPhase(cardPublicKey, true);
+		} catch (InvalidKeyException e) {
+			return null;
+		} catch (IllegalStateException e) {
+			return null;
+		}
+	    
+	    return keyAgreement.generateSecret();
+	}
+	
+	public static Key createAesKey(byte[] key, int offset, int len) {
+		return new SecretKeySpec(key, offset, len, "AES/ECB/PKCS5Padding");
+	}
+	
+	public static Cipher initCipherObject(int opMode, Key aesKey) {
+		Cipher cipherObject = null;
+		
+        try {
+        	cipherObject = Cipher.getInstance("AES/ECB/PKCS5Padding");
+		} catch (NoSuchAlgorithmException e) {
+			
+		} catch (NoSuchPaddingException e) {
+			
+		}
+	        
+        try {
+        	cipherObject.init(opMode, aesKey);
+		} catch (InvalidKeyException e) {
+		}
+        
+        return cipherObject;
+	}
+	
+	public static byte[] cipherObjectDoFinal(Cipher cipherObject, byte[] value) {
+		byte[] result = null;
+		
+        try {
+        	result = cipherObject.doFinal(value);
+		} catch (IllegalBlockSizeException e) {
+			System.out.println("IllegalBlockSizeException " + e.getMessage());
+		} catch (BadPaddingException e) {
+			System.out.println("BadPaddingException " + e.getMessage());
+		}
+        
+        return result;
+	}
+		
+	public static byte[] decryptAes(Cipher cipherDecryptObject, byte[] encryptedData) {
+		byte[] decryptedValue = cipherObjectDoFinal(cipherDecryptObject, encryptedData);		
+        return decryptedValue;
+	}
+	
+	public static byte[] encryptAes(Cipher cipherEncryptObject, byte[] decryptedValue) {
+		byte[] encryptedData = cipherObjectDoFinal(cipherEncryptObject, decryptedValue);		
+        return encryptedData;
 	}
 }

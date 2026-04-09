@@ -1,7 +1,9 @@
 package secure.payment.card.client;
 
+import javax.crypto.Cipher;
 import javax.smartcardio.ResponseAPDU;
 
+import java.security.Key;
 import java.security.KeyPair;
 import java.security.Signature;
 import java.security.interfaces.ECPublicKey;
@@ -12,6 +14,10 @@ import secure.payment.card.client.HttpPayload.SecurePaymentCardRecord;
 import secure.payment.card.client.HttpPayload.HttpResponseBodyUnionType;
 
 public abstract class SessionUserInterface implements UserInterface {
+	private Key aesKey;
+	private Cipher aesCipherDecryptObject;
+	private Cipher aesCipherEncryptObject;
+
 	protected boolean debug;
 	protected boolean verbose;
 
@@ -54,6 +60,27 @@ public abstract class SessionUserInterface implements UserInterface {
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
+		sendMessageToUserIfVerbose("Génération d'une clé partagée");
+		this.aesKey = generateSharedKey();
+		if(this.aesKey == null) {
+			sendMessageToUser("Une erreur inattendue s'est produite.");
+			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+		}
+		
+		this.aesCipherDecryptObject = Crypto.initCipherObject(Cipher.DECRYPT_MODE, aesKey);
+		if(this.aesCipherDecryptObject == null) {
+			sendMessageToUser("Une erreur inattendue s'est produite.");
+			sendMessageToUserIfDebug("Échec de l'initialisation de l'objet Cipher avec l'état Cipher.DECRYPT_MODE");
+			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+		}
+		
+		this.aesCipherEncryptObject = Crypto.initCipherObject(Cipher.ENCRYPT_MODE, aesKey);
+		if(this.aesCipherEncryptObject == null) {
+			sendMessageToUser("Une erreur inattendue s'est produite.");
+			sendMessageToUserIfDebug("Échec de l'initialisation de l'objet Cipher avec l'état Cipher.ENCRYPT_MODE");
+			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+		}
+
 		sendMessageToUserIfVerbose("Obtention de la clé publique de la carte");
 		this.cardPublicKey = getCardPublicKey();
 		if (cardPublicKey == null) {
@@ -64,7 +91,7 @@ public abstract class SessionUserInterface implements UserInterface {
 		this.clientKeyPair = generateServerKeyPair();
 		
 		sendMessageToUserIfVerbose("Envoi de la clé publique du client");
-		if(!sendServerPublicKey()) {
+		if(!sendClientPublicKey()) {
 			sendMessageToUser("Une erreur inattendue s'est produite.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
@@ -93,6 +120,28 @@ public abstract class SessionUserInterface implements UserInterface {
 		if (!setAndVerifyInitialBalance()) {
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
+	
+		//sendMessageToUserIfVerbose("Test");
+		//cardCommunicationChannel.test(aesCipherEncryptObject);
+	}
+	
+	private Key generateSharedKey() {
+		KeyPair keyPair = Crypto.generateKeyPair();
+		ResponseAPDU response = cardCommunicationChannel.keyAgreement((ECPublicKey) keyPair.getPublic());
+		
+		if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
+			byte[] cardPublicKeyByteArray = response.getData();
+			ECPublicKey cardPublicKey = Crypto.getPublicKeyFromByteArray(cardPublicKeyByteArray);		
+			
+			byte[] sharedSecret = Crypto.generateSharedSecret(cardPublicKey, keyPair.getPrivate());
+			if (sharedSecret != null) {
+			    return Crypto.createAesKey(sharedSecret, 16, 16);
+			}
+		} else {
+			sendMessageToUserIfVerbose("Il n'est pas possible de générer une clé partagée.");
+		}
+		
+		return null;
 	}
 	
 	private boolean selectApplet() {
@@ -138,7 +187,7 @@ public abstract class SessionUserInterface implements UserInterface {
 		return Crypto.generateKeyPair();
 	}
 	
-	private boolean sendServerPublicKey() {
+	private boolean sendClientPublicKey() {
 		boolean operationResult = true;
 		
 		ResponseAPDU response = cardCommunicationChannel.putPublicKey((ECPublicKey) clientKeyPair.getPublic());
@@ -218,14 +267,21 @@ public abstract class SessionUserInterface implements UserInterface {
 						operationResult = false;
 						sendMessageToUser("Impossible d'obtenir le solde de la carte.");
 					} else {
-						byte[] balanceBytes = Crypto.getPlainTextAssociatedWithSignature(response, 2);
-						this.balance = Util.bytesToShort(balanceBytes);
-						if (!Crypto.verifySignature(signatureObject, balanceBytes, balanceSignature)) {
+						byte[] decryptedValue = Crypto.decryptAes(aesCipherDecryptObject, response.getData());
+						if (decryptedValue == null) {
+							sendMessageToUser("Le message ne peut pas être déchiffré.");
 							operationResult = false;
-							sendMessageToUser("Problème d'intégrité concernant le solde de la carte.");
 						} else {
-							sendMessageToUserIfVerbose("La vérification de l'intégrité du montant stocké "
-									+ "sur la carte a été effectuée avec succès.");
+							sendMessageToUserIfVerbose(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
+							byte[] balanceBytes = Crypto.getPlainTextAssociatedWithSignature(decryptedValue, 2);
+							this.balance = Util.bytesToShort(balanceBytes);
+							if (!Crypto.verifySignature(signatureObject, balanceBytes, balanceSignature)) {
+								operationResult = false;
+								sendMessageToUser("Problème d'intégrité concernant le solde de la carte.");
+							} else {
+								sendMessageToUserIfVerbose("La vérification de l'intégrité du montant stocké "
+										+ "sur la carte a été effectuée avec succès.");
+							}
 						}
 					}
 				}
@@ -256,9 +312,16 @@ public abstract class SessionUserInterface implements UserInterface {
 		ResponseAPDU response = cardCommunicationChannel.getBalance();
 		sendMessageToUser(Util.convertResponseStatusCodeToString(response, false));
 		if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-			if (Crypto.verifyResponseApduSignature(cardSignatureObject, response, 2)) {
+			byte[] decryptedValue = Crypto.decryptAes(aesCipherDecryptObject, response.getData());
+			if (decryptedValue == null) {
+				sendMessageToUser("Le message ne peut pas être déchiffré.");
+				return;
+			}
+			sendMessageToUserIfVerbose(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
+
+			if (Crypto.verifyResponseApduSignature(cardSignatureObject, decryptedValue, 2)) {
 				sendMessageToUserIfVerbose("L'intégrité de la réponse a été vérifiée et confirmée.");
-				byte[] balanceBytes = Crypto.getPlainTextAssociatedWithSignature(response, 2);
+				byte[] balanceBytes = Crypto.getPlainTextAssociatedWithSignature(decryptedValue, 2);
 				sendMessageToUser("Solde : " + Util.bytesToShort(balanceBytes));
 			} else {
 				sendMessageToUser("Il semblerait que la réponse ait été modifiée pendant le transport.");
@@ -273,7 +336,14 @@ public abstract class SessionUserInterface implements UserInterface {
 		antiReplayAttacksCounter++; 
 		sendMessageToUser(Util.convertResponseStatusCodeToString(response, false));
 		if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-			if (Crypto.verifyResponseApduSignature(cardSignatureObject, response, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2) ) {
+			byte[] decryptedValue = Crypto.decryptAes(aesCipherDecryptObject, response.getData());
+			if (decryptedValue == null) {
+				sendMessageToUser("Le message ne peut pas être déchiffré.");
+				return;
+			}
+			sendMessageToUserIfVerbose(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
+
+			if (Crypto.verifyResponseApduSignature(cardSignatureObject, decryptedValue, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2) ) {
 				sendMessageToUserIfVerbose("L'intégrité de la réponse a été vérifiée et confirmée.");
 				updateBalanceAfterDebit(debitValue);
 			} else {
@@ -284,11 +354,17 @@ public abstract class SessionUserInterface implements UserInterface {
 	}
 	
 	protected void credit(byte creditValue) {
-		ResponseAPDU response = cardCommunicationChannel.credit(creditValue, antiReplayAttacksCounter ,clientSignatureObject);
+		ResponseAPDU response = cardCommunicationChannel.credit(creditValue, antiReplayAttacksCounter ,clientSignatureObject, aesCipherEncryptObject);
 		antiReplayAttacksCounter++; 
 		sendMessageToUser(Util.convertResponseStatusCodeToString(response, false));
 		if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-			if (Crypto.verifyResponseApduSignature(cardSignatureObject, response, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2) ) {
+			byte[] decryptedValue = Crypto.decryptAes(aesCipherDecryptObject, response.getData());
+			if (decryptedValue == null) {
+				sendMessageToUser("Le message ne peut pas être déchiffré.");
+				return;
+			}
+			sendMessageToUserIfVerbose(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
+			if (Crypto.verifyResponseApduSignature(cardSignatureObject, decryptedValue, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2) ) {
 				updateBalanceAfterCredit(creditValue);
 			} else {
 				sendMessageToUser("Il semblerait que la réponse ait été modifiée pendant le transport.");

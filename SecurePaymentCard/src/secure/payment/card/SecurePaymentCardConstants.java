@@ -7,10 +7,11 @@ public class SecurePaymentCardConstants {
     final static byte INS_CREDIT                               = (byte) 0x20;
     final static byte INS_VERIFY_PIN                           = (byte) 0x30;
     final static byte INS_GET_BALANCE                          = (byte) 0x40;
-    final static byte INS_GET_PUBLIC_KEY                       = (byte) 0x50;
-    final static byte INS_PUT_PUBLIC_KEY                       = (byte) 0x60;
+    final static byte INS_GET_SIG_PUBLIC_KEY                   = (byte) 0x50;
+    final static byte INS_PUT_SIG_PUBLIC_KEY                   = (byte) 0x60;
     final static byte INS_GET_PAYEMENT_CARD_ID                 = (byte) 0x70;
-    
+    final static byte INS_KEY_AGREEMENT                        = (byte) 0x80;
+
     final static short SW_COMMUNICATION_PROBLEM                = (short) 0x0000;
     final static short SW_PIN_EXCEPTION_PREFIX                 = (short) 0xf100;
     final static short SW_CRYPTO_EXCEPTION_PREFIX              = (short) 0xf200;
