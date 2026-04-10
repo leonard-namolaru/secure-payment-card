@@ -5,6 +5,7 @@ public class SecurePaymentCardConstants {
     
     final static byte INS_DEBIT                                = (byte) 0x10;
     final static byte INS_CREDIT                               = (byte) 0x20;
+    final static byte INS_SELECT                               = (byte) 0xA4;
     final static byte INS_VERIFY_PIN                           = (byte) 0x30;
     final static byte INS_GET_BALANCE                          = (byte) 0x40;
     final static byte INS_GET_SIG_PUBLIC_KEY                   = (byte) 0x50;

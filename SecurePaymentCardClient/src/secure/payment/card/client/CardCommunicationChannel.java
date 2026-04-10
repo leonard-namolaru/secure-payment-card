@@ -44,9 +44,17 @@ public class CardCommunicationChannel {
 		}
 	}
 	
-	public ResponseAPDU getBalance() {
+	public ResponseAPDU getBalance(byte antiReplayAttacksCounter, Signature serverdSignatureObject, Cipher aesCipherEncryptObject) {
+		byte[] dataWithoutSignature = new byte[] {antiReplayAttacksCounter};
+		byte[] data = Util.createByteArrayWithSignature(dataWithoutSignature, serverdSignatureObject);
+		
+		byte[] encryptedData = Crypto.encryptAes(aesCipherEncryptObject, data);
+		if (encryptedData == null) {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
+
 		CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
-				SecurePaymentCardConstants.INS_GET_BALANCE, 0x00, 0x00, new byte[] {}, MAX_EXPECTED_BYTES_IN_RESPONSE);
+				SecurePaymentCardConstants.INS_GET_BALANCE, 0x00, 0x00, encryptedData, MAX_EXPECTED_BYTES_IN_RESPONSE);
 		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
 		
 		try {
@@ -59,7 +67,7 @@ public class CardCommunicationChannel {
 	}
 	
 	public ResponseAPDU selectApplet() {
-		CommandAPDU command = new CommandAPDU(0x00, 0xA4, 0x04, 0x00, 
+		CommandAPDU command = new CommandAPDU(0x00, SecurePaymentCardConstants.INS_SELECT, 0x04, 0x00, 
 				AID.from(SecurePaymentCardClient.sAID_AppletInstance).toBytes(), MAX_EXPECTED_BYTES_IN_RESPONSE);
 		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
 		
@@ -94,12 +102,17 @@ public class CardCommunicationChannel {
 		}
 	}
 	
-	public ResponseAPDU debit(byte value, byte antiReplayAttacksCounter, Signature serverdSignatureObject) {	
+	public ResponseAPDU debit(byte value, byte antiReplayAttacksCounter, Signature serverdSignatureObject, Cipher aesCipherEncryptObject) {	
 		byte[] dataWithoutSignature = new byte[] {value, antiReplayAttacksCounter};
 		byte[] data = Util.createByteArrayWithSignature(dataWithoutSignature, serverdSignatureObject);
+		
+		byte[] encryptedData = Crypto.encryptAes(aesCipherEncryptObject, data);
+		if (encryptedData == null) {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
 
 		CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
-				SecurePaymentCardConstants.INS_DEBIT, 0x00, 0x00, data, MAX_EXPECTED_BYTES_IN_RESPONSE);
+				SecurePaymentCardConstants.INS_DEBIT, 0x00, 0x00, encryptedData, MAX_EXPECTED_BYTES_IN_RESPONSE);
 		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
 		
 		try {
@@ -111,9 +124,15 @@ public class CardCommunicationChannel {
 		}
 	}
 
-	public ResponseAPDU getPublicKey() {
+	public ResponseAPDU getPublicKey(byte antiReplayAttacksCounter, Cipher aesCipherEncryptObject) {
+		byte[] data = new byte[] {antiReplayAttacksCounter};
+		byte[] encryptedData = Crypto.encryptAes(aesCipherEncryptObject, data);
+		if (encryptedData == null) {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
+
 		CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
-				SecurePaymentCardConstants.INS_GET_SIG_PUBLIC_KEY, 0x00, 0x00, new byte[] {}, MAX_EXPECTED_BYTES_IN_RESPONSE);
+				SecurePaymentCardConstants.INS_GET_SIG_PUBLIC_KEY, 0x00, 0x00, encryptedData, MAX_EXPECTED_BYTES_IN_RESPONSE);
 		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
 		
 		try {
@@ -125,9 +144,17 @@ public class CardCommunicationChannel {
 		}
 	}
 
-	public ResponseAPDU getSecurePayementCardID() {
+	public ResponseAPDU getSecurePayementCardID(byte antiReplayAttacksCounter, Signature serverdSignatureObject, Cipher aesCipherEncryptObject) {
+		byte[] dataWithoutSignature = new byte[] {antiReplayAttacksCounter};
+		byte[] data = Util.createByteArrayWithSignature(dataWithoutSignature, serverdSignatureObject);
+		
+		byte[] encryptedData = Crypto.encryptAes(aesCipherEncryptObject, data);
+		if (encryptedData == null) {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
+		
 		CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
-				SecurePaymentCardConstants.INS_GET_PAYEMENT_CARD_ID, 0x00, 0x00, new byte[] {}, MAX_EXPECTED_BYTES_IN_RESPONSE);
+				SecurePaymentCardConstants.INS_GET_PAYEMENT_CARD_ID, 0x00, 0x00, encryptedData, MAX_EXPECTED_BYTES_IN_RESPONSE);
 		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
 		
 		try {
@@ -140,11 +167,20 @@ public class CardCommunicationChannel {
 	}
 
 	
-	public ResponseAPDU putPublicKey(ECPublicKey clientPublicKey) {
+	public ResponseAPDU putPublicKey(ECPublicKey clientPublicKey, byte antiReplayAttacksCounter, Cipher aesCipherEncryptObject) {
 		byte[] encodedPublicKey = Crypto.getByteArrayFromPublicKey(clientPublicKey);
 		
+		byte[] data = new byte[encodedPublicKey.length + 1];
+		System.arraycopy(encodedPublicKey, 0, data, 0, encodedPublicKey.length);
+		data[data.length - 1] = antiReplayAttacksCounter;
+		
+		byte[] encryptedData = Crypto.encryptAes(aesCipherEncryptObject, data);
+		if (encryptedData == null) {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
+		
 		CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
-				SecurePaymentCardConstants.INS_PUT_SIG_PUBLIC_KEY, 0x00, 0x00, encodedPublicKey, MAX_EXPECTED_BYTES_IN_RESPONSE);
+				SecurePaymentCardConstants.INS_PUT_SIG_PUBLIC_KEY, 0x00, 0x00, encryptedData, MAX_EXPECTED_BYTES_IN_RESPONSE);
 		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
 		
 		try {
@@ -156,9 +192,19 @@ public class CardCommunicationChannel {
 		}
 	}
 	
-	public ResponseAPDU verifyUserPin(byte[] pin) {
+	public ResponseAPDU verifyUserPin(byte[] pin, byte antiReplayAttacksCounter, Signature serverdSignatureObject, Cipher aesCipherEncryptObject) {
+		byte[] dataWithoutSignature = new byte[pin.length + 1];
+		System.arraycopy(pin, 0, dataWithoutSignature, 0, pin.length);
+		dataWithoutSignature[dataWithoutSignature.length - 1] = antiReplayAttacksCounter;
+		
+		byte[] data = Util.createByteArrayWithSignature(dataWithoutSignature, serverdSignatureObject);
+		byte[] encryptedData = Crypto.encryptAes(aesCipherEncryptObject, data);
+		if (encryptedData == null) {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
+
 		CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
-				SecurePaymentCardConstants.INS_VERIFY_PIN, 0x00, 0x00, pin);
+				SecurePaymentCardConstants.INS_VERIFY_PIN, 0x00, 0x00, encryptedData, MAX_EXPECTED_BYTES_IN_RESPONSE);
 		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
 		
 		try {

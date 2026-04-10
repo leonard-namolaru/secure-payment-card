@@ -7,6 +7,8 @@ import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 import com.oracle.javacard.ams.AMService;
 import java.lang.reflect.InvocationTargetException;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
 
 /**
@@ -14,6 +16,10 @@ import java.lang.reflect.InvocationTargetException;
  */
 public final class Util {
 	private Util() {}
+	
+	public static int bytesToInt(byte[] buffer, int numberOffset, int numberLength) {
+		return new BigInteger(buffer, numberOffset, numberLength).intValue();
+	}
 	
 	public static String bytesToHex(byte[] bytes) {
 	    HexFormat hexFormat = HexFormat.of();

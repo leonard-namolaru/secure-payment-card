@@ -181,7 +181,9 @@ public class SecurePaymentCard extends Applet {
         		ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
         	}
         
-        	if (insByte != SecurePaymentCardConstants.INS_VERIFY_PIN) {
+        	if (insByte == SecurePaymentCardConstants.INS_GET_BALANCE 
+        			|| insByte == SecurePaymentCardConstants.INS_DEBIT 
+        			|| insByte == SecurePaymentCardConstants.INS_CREDIT) {
         		if (!ownerPin.isValidated()) {
         			PINException.throwIt(SecurePaymentCardConstants.SW_PIN_VERIFICATION_REQUIRED);
         		}
@@ -269,7 +271,9 @@ public class SecurePaymentCard extends Applet {
         apdu.setOutgoingAndSend((short) 0, copiedDataOffsetAndLength);
     }
     
-    private byte handleIncomingApduData(APDU incomingApduCommand, byte[] apduBufferByteArray) {   
+    private byte[] handleIncomingApduData(APDU incomingApduCommand, byte[] apduBufferByteArray, short dataLength, boolean withSignature) { 
+    	byte clientCounterSize = 1;
+    	
     	byte[] expectedCounterValue = new byte[SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE];
     	antiReplayAttacksCounter.get(expectedCounterValue, (short) 0);
         antiReplayAttacksCounter.incrementBy((short) 1);
@@ -285,26 +289,28 @@ public class SecurePaymentCard extends Applet {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
         
-        byte[] tmpBuffer = new byte[byteRead];
+        byte[] decryptedBuffer = new byte[byteRead];
     	// short doFinal​(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset)
-    	short outputLength = aesCipherDecryptObject.doFinal(apduBufferByteArray, ISO7816.OFFSET_CDATA, byteRead, tmpBuffer, (short) 0);
+    	short outputLength = aesCipherDecryptObject.doFinal(apduBufferByteArray, ISO7816.OFFSET_CDATA, byteRead, decryptedBuffer, (short) 0);
+    	
+        byte[] data = new byte[dataLength];
+        // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+        Util.arrayCopy(decryptedBuffer, (short) 0, data, (short) 0, dataLength);
 
-        byte creditAmount = tmpBuffer[0];
-        byte clientCounterValue = tmpBuffer[1];
-
+        byte clientCounterValue = decryptedBuffer[dataLength];
         if (clientCounterValue != expectedCounterValue[SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE - 1]) {
-            ISOException.throwIt((short) 1);
+            ISOException.throwIt((short) (outputLength - 1));
         }
 
-        if (!verifySignature2(tmpBuffer, (short) 2, (short) (outputLength - 2))) {
+        if (withSignature && !verifySignature(decryptedBuffer, (short) 0, (short) (dataLength + clientCounterSize), (short) (outputLength - dataLength - clientCounterSize))) {
             ISOException.throwIt((short) 2);
         }
-    	return creditAmount;
+    	return data;
     }
 
     
     private void credit(APDU incomingApduCommand, byte[] apduBufferByteArray) {
-    	byte creditAmount = handleIncomingApduData(incomingApduCommand, apduBufferByteArray);
+    	byte creditAmount = handleIncomingApduData(incomingApduCommand, apduBufferByteArray, (short) 1, true)[0];
         if (((creditAmount & 0xFF) > SecurePaymentCardConstants.MAX_TRANSACTION) || (creditAmount < 0)) {
             TransactionException.throwIt(SecurePaymentCardConstants.SW_INVALID_TRANSACTION);
         }
@@ -317,39 +323,15 @@ public class SecurePaymentCard extends Applet {
         balance = (short) (balance + creditAmount);
    	 	signBalance();
         JCSystem.commitTransaction();
-
-        short offset = generateResponseBuffer(creditAmount, apduBufferByteArray, true);
+        
+        short offset = Util.setShort(apduBufferByteArray, (short) 0, creditAmount);
+        offset = generateResponseBuffer(offset, apduBufferByteArray, true);
         incomingApduCommand.setOutgoingAndSend((short) 0, offset);
     }
     
     private void debit(APDU incomingApduCommand, byte[] apduBufferByteArray) {
-    	byte[] expectedCounterValue = new byte[SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE];
-    	antiReplayAttacksCounter.get(expectedCounterValue, (short) 0);
-    	
-        antiReplayAttacksCounter.incrementBy((short) 1);
+        byte debitAmount = handleIncomingApduData(incomingApduCommand, apduBufferByteArray, (short) 1, true)[0];
                 
-    	// L'octet Lc désigne le nombre d'octets dans le champ data de la commande APDU  
-        byte numBytes = apduBufferByteArray[ISO7816.OFFSET_LC];
-
-        // Indique que cette APDU a des données à partir de ISO7816.OFFSET_CDATA ,suivant les 5 octets d'en-tête.
-        byte byteRead = (byte) (incomingApduCommand.setIncomingAndReceive());
-        
-        // Si le nombre d'octets de données lus ne correspond pas au nombre d'octets dans Lc.
-        if (numBytes != byteRead) {
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        }
-        
-        byte debitAmount = apduBufferByteArray[ISO7816.OFFSET_CDATA];
-        byte clientCounterValue = apduBufferByteArray[ISO7816.OFFSET_CDATA + 1];
-        
-        if (clientCounterValue != expectedCounterValue[SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE - 1]) {
-            ISOException.throwIt((short) expectedCounterValue[SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE - 1]);
-        }
-        
-        if (!verifySignature(apduBufferByteArray, (short) 2, (short) (byteRead - 2))) {
-            ISOException.throwIt((short) byteRead);
-        }
-        
         if (((debitAmount & 0xFF) > SecurePaymentCardConstants.MAX_TRANSACTION) || (debitAmount < 0)) {
         	TransactionException.throwIt(SecurePaymentCardConstants.SW_INVALID_TRANSACTION);
         }
@@ -362,50 +344,53 @@ public class SecurePaymentCard extends Applet {
         balance = (short) (balance - debitAmount);
    	 	signBalance();
         JCSystem.commitTransaction();
-
-        short offset = generateResponseBuffer(debitAmount, apduBufferByteArray, true);
+        
+        short offset = Util.setShort(apduBufferByteArray, (short) 0, debitAmount);
+        offset = generateResponseBuffer(offset, apduBufferByteArray, true);
         incomingApduCommand.setOutgoingAndSend((short) 0, offset);
     }
 
     private void getBalance(APDU incomingApduCommand, byte[] apduBufferByteArray) {
-        short offset = generateResponseBuffer(balance, apduBufferByteArray, false);
+    	handleIncomingApduData(incomingApduCommand, apduBufferByteArray, (short) 0, true);
+    	
+        short offset = Util.setShort(apduBufferByteArray, (short) 0, balance);
+        offset = generateResponseBuffer(offset, apduBufferByteArray, true);
         incomingApduCommand.setOutgoingAndSend((short) 0, offset);
     }
     
     private void verifyPin(APDU incomingApduCommand) {
         byte[] buffer = incomingApduCommand.getBuffer();
-        byte byteRead = (byte) (incomingApduCommand.setIncomingAndReceive());
-        
-        if (byteRead < SecurePaymentCardConstants.PIN_SIZE) {
-            PINException.throwIt(SecurePaymentCardConstants.SW_PIN_TOO_SMALL);
-        }
-        
-        if (ownerPin.check(buffer, ISO7816.OFFSET_CDATA, byteRead) == false) {
+        byte[] pin = handleIncomingApduData(incomingApduCommand, buffer, SecurePaymentCardConstants.PIN_SIZE, true);
+                
+        if (ownerPin.check(pin, (short) 0, (byte) pin.length) == false) {
             PINException.throwIt(SecurePaymentCardConstants.SW_PIN_VERIFICATION_FAILED);
         }
     }
     
-    
     private void getClientPublicKey(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
-        byte byteRead = (byte) (apdu.setIncomingAndReceive());
-        
+        byte[] encodedPublicKey = handleIncomingApduData(apdu, buffer, (short) 65, false);
+
         try {
         	// void setEncoded​(byte[] value, short offset, short length)
-            clientSigPublicKey.setEncoded(buffer, ISO7816.OFFSET_CDATA, byteRead);
+            clientSigPublicKey.setEncoded(encodedPublicKey, (short) 0, (short) encodedPublicKey.length);
             clientSignature.init(clientSigPublicKey, Signature.MODE_VERIFY);
         } catch (CryptoException e) {
             CryptoException.throwIt(SecurePaymentCardConstants.SW_SIGNATURE_INITIALIZATION_FAILED);
         }
     }
     
-    private void sendSecurePayementCardID(APDU apdu) {        
+    private void sendSecurePayementCardID(APDU apdu) {   
+    	handleIncomingApduData(apdu, apdu.getBuffer(), (short) 0, true);
+    	
         // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
         short copiedDataOffsetAndLength = Util.arrayCopy(securePayementCardID, (short) 0, apdu.getBuffer(), (short) 0, (short) securePayementCardID.length);
         apdu.setOutgoingAndSend((short) 0, copiedDataOffsetAndLength);
     }
     
     private void sendCardPublicKey(APDU apdu) {
+    	handleIncomingApduData(apdu, apdu.getBuffer(), (short) 0, false);
+
         try {
             XECPublicKey publicKey = (XECPublicKey) cardSigKeyPair.getPublic();
             short copiedDataOffsetAndLength = publicKey.getEncoded(apdu.getBuffer(), (short) 0);
@@ -415,12 +400,9 @@ public class SecurePaymentCard extends Applet {
         }
     }
 
-    private short generateResponseBuffer(short value, byte[] output, boolean includeCounter) {
-        short position = 0;
-        try {
-            // Ecrire la valeur ( + compteur si includeCounter == true)
-            position = Util.setShort(output, position, value);
-            
+    private short generateResponseBuffer(short offset, byte[] output, boolean includeCounter) {
+        short position = offset;
+        try {            
             if (includeCounter) {
                 position = antiReplayAttacksCounter.get(output, position);
             }
@@ -475,14 +457,9 @@ public class SecurePaymentCard extends Applet {
     	// verify​(byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset, short sigLength)
     	return signatureObject.verify(message, (short) 0, (short) message.length, signature, (short) 0, (short) signature.length);
     }
-
-    private boolean verifySignature(byte[] input, short messageLength, short signatureLength) {
-    	// verify​(byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset, short sigLength)
-    	return clientSignature.verify(input, ISO7816.OFFSET_CDATA, messageLength, input, (short) (ISO7816.OFFSET_CDATA + messageLength), signatureLength);
-    }
     
-    private boolean verifySignature2(byte[] input, short messageLength, short signatureLength) {
+    private boolean verifySignature(byte[] input, short messageOffset, short messageLength, short signatureLength) {
     	// verify​(byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset, short sigLength)
-    	return clientSignature.verify(input, (short) 0, messageLength, input, messageLength, signatureLength);
+    	return clientSignature.verify(input, messageOffset, messageLength, input, (short) (messageOffset + messageLength), signatureLength);
     }
 }
