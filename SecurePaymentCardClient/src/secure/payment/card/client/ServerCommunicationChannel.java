@@ -18,11 +18,11 @@ import java.net.http.HttpRequest.Builder;
 import java.net.http.HttpTimeoutException;
 
 import secure.payment.card.client.HttpPayload.ErrorResponse;
+import secure.payment.card.client.HttpPayload.OperationResult;
 import secure.payment.card.client.HttpPayload.AuthenticationRequest;
 import secure.payment.card.client.HttpPayload.AuthenticationResponse;
 import secure.payment.card.client.HttpPayload.SecurePaymentCardRecord;
 import secure.payment.card.client.HttpPayload.HttpResponseBodyUnionType;
-import secure.payment.card.client.HttpPayload.OperationResult;
 import secure.payment.card.client.HttpPayload.SecurePaymentCardCreationResponse;
 
 public class ServerCommunicationChannel {

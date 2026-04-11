@@ -11,7 +11,9 @@ public class SecurePaymentCardConstants {
     final static byte INS_GET_SIG_PUBLIC_KEY                   = (byte) 0x50;
     final static byte INS_PUT_SIG_PUBLIC_KEY                   = (byte) 0x60;
     final static byte INS_GET_PAYEMENT_CARD_ID                 = (byte) 0x70;
-    final static byte INS_KEY_AGREEMENT                        = (byte) 0x80;
+    final static byte INS_CLIENT_CARD_KEY_AGREEMENT            = (byte) 0x80;
+    final static byte INS_CHALLENGE_RESPONSE                   = (byte) 0x84;
+    final static byte INS_SEND_CLIENT_CERTIFICATE              = (byte) 0x90;
 
     final static short SW_COMMUNICATION_PROBLEM                = (short) 0x0000;
     final static short SW_PIN_EXCEPTION_PREFIX                 = (short) 0xf100;
@@ -45,6 +47,7 @@ public class SecurePaymentCardConstants {
     final static short SW_MAXIMUM_BALANCE                      =  7;
     final static short SW_NEGATIVE_BALANCE                     =  8;
     
+    final static byte CARD_ID_LENGTH                           =  26;
     final static byte PIN_SIZE                                 =  6;
     final static short MAX_BALANCE                             =  0x7FFF;
     final static byte SIGNATURE_SIZE                           =  64;

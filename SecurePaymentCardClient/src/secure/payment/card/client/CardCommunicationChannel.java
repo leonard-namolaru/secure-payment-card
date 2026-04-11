@@ -1,8 +1,11 @@
 package secure.payment.card.client;
 
 import java.util.List;
+
 import java.security.Signature;
+import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
+import java.security.cert.CertificateEncodingException;
 
 import javax.crypto.Cipher;
 import javax.smartcardio.CardChannel;
@@ -32,7 +35,7 @@ public class CardCommunicationChannel {
 		byte[] encodedPublicKey = Crypto.getByteArrayFromPublicKey(clientPublicKey);
 
 		CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
-				SecurePaymentCardConstants.INS_KEY_AGREEMENT, 0x00, 0x00, encodedPublicKey, MAX_EXPECTED_BYTES_IN_RESPONSE);
+				SecurePaymentCardConstants.INS_CLIENT_CARD_KEY_AGREEMENT, 0x00, 0x00, encodedPublicKey, MAX_EXPECTED_BYTES_IN_RESPONSE);
 		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
 		
 		try {
@@ -80,6 +83,39 @@ public class CardCommunicationChannel {
 		}
 	}
 	
+	public ResponseAPDU sendChallengeResponse(byte challengeResponse[]) {
+		if (challengeResponse.length <= 255) {
+			CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
+					SecurePaymentCardConstants.INS_CHALLENGE_RESPONSE, 0x00, 0x00, challengeResponse, MAX_EXPECTED_BYTES_IN_RESPONSE);
+			userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
+			
+			try {
+				ResponseAPDU response = cardChannel.transmit(command);
+				userInterface.sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
+				return response;
+			} catch (CardException e) {
+				return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+			}
+		} else if (challengeResponse.length == 256) {
+			byte[] tmp = new byte[challengeResponse.length - 1];
+			System.arraycopy(challengeResponse, 1, tmp, 0, challengeResponse.length - 1);
+			
+			CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
+					SecurePaymentCardConstants.INS_CHALLENGE_RESPONSE, 0x00, challengeResponse[0], tmp, MAX_EXPECTED_BYTES_IN_RESPONSE);
+			userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
+			
+			try {
+				ResponseAPDU response = cardChannel.transmit(command);
+				userInterface.sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
+				return response;
+			} catch (CardException e) {
+				return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+			}
+		} else {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
+	}
+
 	public ResponseAPDU credit(byte value, byte antiReplayAttacksCounter, Signature serverdSignatureObject, Cipher aesCipherEncryptObject) {
 		byte[] dataWithoutSignature = new byte[] {value, antiReplayAttacksCounter};
 		byte[] data = Util.createByteArrayWithSignature(dataWithoutSignature, serverdSignatureObject);
@@ -166,7 +202,6 @@ public class CardCommunicationChannel {
 		}
 	}
 
-	
 	public ResponseAPDU putPublicKey(ECPublicKey clientPublicKey, byte antiReplayAttacksCounter, Cipher aesCipherEncryptObject) {
 		byte[] encodedPublicKey = Crypto.getByteArrayFromPublicKey(clientPublicKey);
 		
@@ -222,6 +257,35 @@ public class CardCommunicationChannel {
 			ResponseAPDU response = responses.get(i);
 			userInterface.sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
 		}
+	}
+	
+	public ResponseAPDU sendClientCertificate(X509Certificate certificate) {		
+		try {
+			int payloadSize = 120;
+			byte[] certificateBytes = certificate.getEncoded();
+			for(int i = 0; i < certificateBytes.length; i += payloadSize) {
+				int start = i;
+				int end = (i + payloadSize) >= certificateBytes.length ? certificateBytes.length : (i + payloadSize);
+				int isLastPayload = (i + payloadSize) >= certificateBytes.length ? 0x01 : 0x00;
+
+				byte[] buffer = new byte[end - start];
+				System.arraycopy(certificateBytes, start, buffer, 0, end - start);
+				
+				CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
+							SecurePaymentCardConstants.INS_SEND_CLIENT_CERTIFICATE, 0x00, (byte) isLastPayload, 
+							buffer, MAX_EXPECTED_BYTES_IN_RESPONSE);
+				userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
+				
+					ResponseAPDU response = cardChannel.transmit(command);
+					userInterface.sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
+					if (response.getSW() != STATUS_OK || isLastPayload == 0x01) {
+						return response;
+					}
+			}
+		} catch (CertificateEncodingException | CardException e) {
+			userInterface.sendMessageToUserIfDebug(String.format("%s : %s", e.getClass().toString(), e.getMessage()));
+		}
+		return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
 	}
 	
 	public void undeploy(AMService applicationManagementService) {

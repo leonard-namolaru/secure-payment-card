@@ -1,5 +1,9 @@
 package secure.payment.card;
 
+import javacardx.crypto.Cipher;
+import javacardx.security.cert.Certificate;
+import javacardx.security.util.MonotonicCounter;
+
 import javacard.framework.Util;
 import javacard.framework.APDU;
 import javacard.framework.Applet;
@@ -15,6 +19,7 @@ import javacard.security.AESKey;
 import javacard.security.KeyPair;
 import javacard.security.Signature;
 import javacard.security.KeyBuilder;
+import javacard.security.RandomData;
 import javacard.security.KeyAgreement;
 import javacard.security.XECPublicKey;
 import javacard.security.XECPrivateKey;
@@ -22,14 +27,16 @@ import javacard.security.MessageDigest;
 import javacard.security.CryptoException;
 import javacard.security.NamedParameterSpec;
 
-import javacardx.crypto.Cipher;
-import javacardx.security.util.MonotonicCounter;
-
 public class SecurePaymentCard extends Applet {
+	private short certificateOffset;
+    private byte[] certificateBuffer;
+	private Certificate clientCertificate;
+	private byte[] authenticationChallenge;
+
 	private AESKey aesKey;
 	private Cipher aesCipherDecryptObject;
 	private Cipher aesCipherEncryptObject;
-	
+
     private short balance;
     private byte[] balanceSignature;
     private final OwnerPIN ownerPin;
@@ -42,7 +49,12 @@ public class SecurePaymentCard extends Applet {
     private final MonotonicCounter antiReplayAttacksCounter;
 
     private SecurePaymentCard(OwnerPIN ownerPin, MonotonicCounter antiReplayAttacksCounter, Signature cardSignature, Signature serverSignature, 
-    		Signature cardSignatureCheck, KeyPair cardKeyPair, XECPublicKey serverPublicKey, short initialBalance, byte[] securePayementCardID) { 
+    		Signature cardSignatureCheck, KeyPair cardKeyPair, XECPublicKey serverPublicKey, short initialBalance, byte[] securePayementCardID, Certificate certificate) { 
+    	this.certificateOffset = 0;
+    	this.clientCertificate = certificate;
+    	this.certificateBuffer = new byte[800];
+    	this.authenticationChallenge = new byte[100];
+    	
     	this.aesKey = null;
     	this.ownerPin = ownerPin;
     	this.balance = initialBalance;
@@ -54,7 +66,7 @@ public class SecurePaymentCard extends Applet {
     	this.securePayementCardID = securePayementCardID;
     	this.antiReplayAttacksCounter = antiReplayAttacksCounter;
     	this.balanceSignature = new byte[SecurePaymentCardConstants.SIGNATURE_SIZE];
-    	
+    	    	
     	this.genKeyPair();
     	signBalance();
     }
@@ -81,20 +93,18 @@ public class SecurePaymentCard extends Applet {
         OwnerPIN pin = new OwnerPIN(SecurePaymentCardConstants.PIN_MAX_INCORRECT_TRIES, SecurePaymentCardConstants.PIN_SIZE);
         MonotonicCounter counter = MonotonicCounter.getInstance(SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE, JCSystem.MEMORY_TYPE_TRANSIENT_DESELECT);
         
-        if (appletDataLength < SecurePaymentCardConstants.PIN_SIZE) {
+        if ((appletDataLength - SecurePaymentCardConstants.CARD_ID_LENGTH) < SecurePaymentCardConstants.PIN_SIZE) {
         	ISOException.throwIt((short) (SecurePaymentCardConstants.SW_PIN_EXCEPTION_PREFIX | SecurePaymentCardConstants.SW_PIN_TOO_SMALL));
         }
-                
-        pin.update(installParameters, (short) (appletDataLengthOffset + 1), SecurePaymentCardConstants.PIN_SIZE);
+        pin.update(installParameters, (short) (appletDataLengthOffset + 1 + SecurePaymentCardConstants.CARD_ID_LENGTH), SecurePaymentCardConstants.PIN_SIZE);
     	
-        byte securePayementCardIdLength = (byte) (appletDataLength - SecurePaymentCardConstants.PIN_SIZE);
-        byte[] securePayementCardID = new byte[securePayementCardIdLength];
+        byte[] securePayementCardID = new byte[SecurePaymentCardConstants.CARD_ID_LENGTH];
         
         // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
-        Util.arrayCopy(installParameters, (short) (appletDataLengthOffset + 1 + SecurePaymentCardConstants.PIN_SIZE), securePayementCardID, (short) 0, (short) securePayementCardIdLength);
+        Util.arrayCopy(installParameters, (short) (appletDataLengthOffset + 1), securePayementCardID, (short) 0, (short) SecurePaymentCardConstants.CARD_ID_LENGTH);
         
         SecurePaymentCard securePaymentCard = new SecurePaymentCard(pin, counter, cardSignature, serverSignature, 
-    			cardSignatureCheck, keyPair, clientPublicKey, (short) 0, securePayementCardID);
+    			cardSignatureCheck, keyPair, clientPublicKey, (short) 0, securePayementCardID, null);
     	securePaymentCard.register();	
     }
     
@@ -137,7 +147,8 @@ public class SecurePaymentCard extends Applet {
     	if (pinTriesRemaining == 0) {
     		selectable = false;
     	}
-    	
+    	this.certificateOffset = 0;
+
     	this.genKeyPair();
     	signBalance();
         return selectable;
@@ -215,9 +226,15 @@ public class SecurePaymentCard extends Applet {
             	case SecurePaymentCardConstants.INS_GET_PAYEMENT_CARD_ID:
             		sendSecurePayementCardID(incomingApduCommand);
             		break; 
-            	case SecurePaymentCardConstants.INS_KEY_AGREEMENT:
+            	case SecurePaymentCardConstants.INS_CLIENT_CARD_KEY_AGREEMENT:
             		keyAgreement(incomingApduCommand);
             		break; 
+            	case SecurePaymentCardConstants.INS_SEND_CLIENT_CERTIFICATE:
+            		getClientCertificate(incomingApduCommand);
+            		break; 
+            	case SecurePaymentCardConstants.INS_CHALLENGE_RESPONSE:
+            		clientAuthentication(incomingApduCommand);
+            		break;
             	default:
             		ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         	}
@@ -231,6 +248,45 @@ public class SecurePaymentCard extends Applet {
             ISOException.throwIt((short) (SecurePaymentCardConstants.SW_TRANSACTION_EXCEPTION_PREFIX | exception.getReason()));
         }
      }
+    
+    private void clientAuthentication(APDU apdu) {
+    	byte[] buffer = apdu.getBuffer();
+        short byteRead = apdu.setIncomingAndReceive();
+        
+        Signature sig = Signature.getInstance(MessageDigest.ALG_SHA, Signature.SIG_CIPHER_RSA, Cipher.PAD_PKCS1, false);
+        sig.init(clientCertificate.getPublicKey(), Signature.MODE_VERIFY);
+        
+        byte[] signatureBuffer = new byte[256];
+        signatureBuffer[0] = buffer[ISO7816.OFFSET_P2];
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, signatureBuffer, (short) 1, byteRead);
+        
+        if (!verifySignature(sig, authenticationChallenge, signatureBuffer)) {
+        	ISOException.throwIt((short) 0x06);
+        }
+    }
+    
+    private void getClientCertificate(APDU apdu) {
+    	byte[] buffer = apdu.getBuffer();
+        short byteRead = apdu.setIncomingAndReceive();
+        boolean isLastMessage = buffer[ISO7816.OFFSET_P2] == 0x01;
+
+        // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, certificateBuffer, this.certificateOffset, byteRead);
+        
+        if (isLastMessage) {
+            Cert cert = new Cert();
+            this.clientCertificate = cert.buildCert(certificateBuffer, (short) 0, (short) (this.certificateOffset + byteRead));
+            
+            RandomData.OneShot rng = RandomData.OneShot.open(RandomData.ALG_TRNG);
+            rng.nextBytes(authenticationChallenge, (short) 0, (short) authenticationChallenge.length);
+            
+            // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+            Util.arrayCopy(authenticationChallenge, (short) 0, buffer, (short) 0, (short) authenticationChallenge.length);
+            apdu.setOutgoingAndSend((short) 0, (short) authenticationChallenge.length);
+       }
+        
+        this.certificateOffset += 120;
+    }
     
     private void keyAgreement(APDU apdu) { 
         NamedParameterSpec namedParameterSpec = NamedParameterSpec.getInstance(NamedParameterSpec.SECP256R1); // secp256r1 curve
@@ -308,7 +364,6 @@ public class SecurePaymentCard extends Applet {
     	return data;
     }
 
-    
     private void credit(APDU incomingApduCommand, byte[] apduBufferByteArray) {
     	byte creditAmount = handleIncomingApduData(incomingApduCommand, apduBufferByteArray, (short) 1, true)[0];
         if (((creditAmount & 0xFF) > SecurePaymentCardConstants.MAX_TRANSACTION) || (creditAmount < 0)) {

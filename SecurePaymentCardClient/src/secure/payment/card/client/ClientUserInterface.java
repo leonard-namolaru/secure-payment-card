@@ -2,16 +2,17 @@ package secure.payment.card.client;
 
 import java.util.Properties;
 import javax.smartcardio.CardChannel;
+
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import java.io.IOException;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 
+import java.security.Security;
 import java.security.KeyPair;
 import java.security.Signature;
 import java.security.NoSuchProviderException;
-import java.security.Security;
 import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
 
@@ -123,8 +124,9 @@ public abstract class ClientUserInterface implements UserInterface {
 			sendMessageToUserIfDebug(String.format("createDeployObject(), IOException (2) : %s", e.getMessage()));
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
 		}  
-		
-		byte[] installationParameters = Util.concatArrays(pin, securePayementCardID.getBytes());
+				
+		byte[] installationParameters = Util.concatArrays(securePayementCardID.getBytes(), pin);
+
 		deploy.install(SecurePaymentCardClient.sAID_CAP, SecurePaymentCardClient.sAID_AppletClass, 
 				SecurePaymentCardClient.sAID_AppletInstance, installationParameters); 
 		deploy.close();

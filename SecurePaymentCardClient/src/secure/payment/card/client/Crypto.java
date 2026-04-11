@@ -1,36 +1,54 @@
 package secure.payment.card.client;
 
+import java.util.Date;
 import java.math.BigInteger;
 
-import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyAgreement;
-import javax.crypto.NoSuchPaddingException;
 import javax.crypto.spec.SecretKeySpec;
-import javax.smartcardio.ResponseAPDU;
-import org.bouncycastle.jce.ECPointUtil;
+import javax.crypto.BadPaddingException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.IllegalBlockSizeException;
 
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+import javax.security.auth.x500.X500Principal;
+
+import java.security.Key;
 import java.security.KeyPair;
 import java.security.Signature;
 import java.security.KeyFactory;
+import java.security.PrivateKey;
 import java.security.spec.ECPoint;
 import java.security.KeyPairGenerator;
 import java.security.SignatureException;
 import java.security.AlgorithmParameters;
 import java.security.InvalidKeyException;
-import java.security.Key;
 import java.security.spec.ECPublicKeySpec;
 import java.security.spec.ECParameterSpec;
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.ECPrivateKey;
 import java.security.spec.ECGenParameterSpec;
 import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.InvalidParameterSpecException;
-import java.util.ArrayList;
 import java.security.InvalidAlgorithmParameterException;
+
+import org.bouncycastle.jce.ECPointUtil;
+import org.bouncycastle.asn1.DERSequence;
+import org.bouncycastle.asn1.ASN1Encodable;
+import org.bouncycastle.asn1.x509.KeyUsage;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.KeyPurposeId;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.asn1.x509.BasicConstraints;
+import org.bouncycastle.asn1.x509.ExtendedKeyUsage;
+import org.bouncycastle.cert.X509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 
 /**
  * Cryptographie
@@ -50,8 +68,15 @@ public final class Crypto {
 		byteArray[0] = 0x04;
 		
 		try {
+			// void java.lang.System.arraycopy( Object src, int srcPos, Object dest, int destPos, int length)
 			System.arraycopy(xBytes, xBytes[0] == 0x00 ? 1 : 0, byteArray, 1, 32);
 			System.arraycopy(yBytes, yBytes[0] == 0x00 ? 1 : 0, byteArray, 33, 32);
+			System.out.println(Util.bytesToHex(xBytes));
+			System.out.println(Util.bytesToHex(yBytes));
+			System.out.println(Util.bytesToHex(byteArray));
+			System.out.println(xBytes.length);
+			System.out.println(yBytes.length);
+
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println(Util.bytesToHex(xBytes));
@@ -362,5 +387,42 @@ public final class Crypto {
 	public static byte[] encryptAes(Cipher cipherEncryptObject, byte[] decryptedValue) {
 		byte[] encryptedData = cipherObjectDoFinal(cipherEncryptObject, decryptedValue);		
         return encryptedData;
+	}
+	
+	public static KeyPair generateRsaKeyPair() {
+        KeyPairGenerator keyPairGenerator = null;
+		try {
+			keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+		} catch (NoSuchAlgorithmException e) {
+	          System.out.println(e.getMessage());
+		}
+        keyPairGenerator.initialize(2048, new SecureRandom());
+        return keyPairGenerator.generateKeyPair();
+	}
+	
+	public static X509Certificate createSelfSignedCertificate(KeyPair keyPair) {	      
+	      X500Principal distinguishedName = new X500Principal("CN=localhost");	      
+
+	      long now = System.currentTimeMillis();
+	      long validityPeriod = now + (1000L * 3600L * 24 * 365);
+
+	      ASN1Encodable[] encodableAltNames = new ASN1Encodable[]{new GeneralName(GeneralName.dNSName, "localhost")};
+	      KeyPurposeId[] purposes = new KeyPurposeId[]{KeyPurposeId.id_kp_serverAuth, KeyPurposeId.id_kp_clientAuth};
+
+	      X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(distinguishedName,
+	            BigInteger.ONE, new Date(now), new Date(validityPeriod), distinguishedName, keyPair.getPublic());
+	      try {
+	          certBuilder.addExtension(Extension.basicConstraints, true, new BasicConstraints(false));
+	          certBuilder.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature + KeyUsage.keyEncipherment));
+	          certBuilder.addExtension(Extension.extendedKeyUsage, false, new ExtendedKeyUsage(purposes));
+	          certBuilder.addExtension(Extension.subjectAlternativeName, false, new DERSequence(encodableAltNames));
+	          
+	          final ContentSigner signer = new JcaContentSignerBuilder(("SHA1withRSA")).build(keyPair.getPrivate());	          
+	          return new JcaX509CertificateConverter()
+	    	            .setProvider(new BouncyCastleProvider()).getCertificate(certBuilder.build(signer));
+	       } catch (Exception e) {
+	          System.out.println(e.getMessage());
+	       }
+	      return null;
 	}
 }

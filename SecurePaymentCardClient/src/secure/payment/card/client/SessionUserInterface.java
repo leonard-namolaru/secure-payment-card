@@ -6,8 +6,13 @@ import javax.smartcardio.ResponseAPDU;
 import java.security.Key;
 import java.security.KeyPair;
 import java.security.Signature;
+import java.security.SignatureException;
+import java.security.InvalidKeyException;
+import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.ECPrivateKey;
+import java.security.NoSuchProviderException;
+import java.security.NoSuchAlgorithmException;
 
 import secure.payment.card.client.HttpPayload.OperationResult;
 import secure.payment.card.client.HttpPayload.SecurePaymentCardRecord;
@@ -50,6 +55,14 @@ public abstract class SessionUserInterface implements UserInterface {
 		sendMessageToUserIfVerbose("Envoi de la commande SELECT à la carte");
 		if (!selectApplet()) {
 			sendMessageToUser("Une erreur inattendue s'est produite.");
+			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+		}
+		
+		sendMessageToUserIfVerbose("Authentification du client");
+		if (clientAuthentication()) {
+			sendMessageToUser("L'authentification du client a réussi.");
+		} else {
+			sendMessageToUser("L'authentification du client a échoué.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
@@ -121,6 +134,37 @@ public abstract class SessionUserInterface implements UserInterface {
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 	}
+	
+	private boolean clientAuthentication() {
+		boolean authenticationResult = true;
+		
+		KeyPair keyPair = Crypto.generateRsaKeyPair();
+		X509Certificate certificate = Crypto.createSelfSignedCertificate(keyPair);		
+		ResponseAPDU response = cardCommunicationChannel.sendClientCertificate(certificate);
+		if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
+			byte[] challenge = response.getData();
+			
+			try {
+				Signature signatureObject = Signature.getInstance("SHA1withRSA", "BC");
+				signatureObject.initSign(keyPair.getPrivate());
+				signatureObject.update(challenge);
+				
+				byte[] signature = signatureObject.sign();
+				response = cardCommunicationChannel.sendChallengeResponse(signature);
+				if (response.getSW() != CardCommunicationChannel.STATUS_OK) {
+					authenticationResult = false;
+				}
+			} catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidKeyException | SignatureException e) {
+				sendMessageToUserIfDebug(String.format("%s : %s", e.getClass().toString(), e.getMessage()));
+				authenticationResult = false;
+			}
+		} else {
+			authenticationResult = false;
+		}
+		
+		return authenticationResult;
+	}
+	
 	
 	private Key generateSharedKey() {
 		KeyPair keyPair = Crypto.generateKeyPair();

@@ -1,14 +1,13 @@
 package secure.payment.card.client;
 
 import java.util.HexFormat;
+import java.math.BigInteger;
 import java.security.Signature;
 
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 import com.oracle.javacard.ams.AMService;
 import java.lang.reflect.InvocationTargetException;
-import java.math.BigInteger;
-import java.nio.ByteBuffer;
 
 
 /**
