@@ -133,6 +133,8 @@ public abstract class SessionUserInterface implements UserInterface {
 		if (!setAndVerifyInitialBalance()) {
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
+		
+		sendMessageToUser("La session a démarré");
 	}
 	
 	private boolean clientAuthentication() {
@@ -258,7 +260,7 @@ public abstract class SessionUserInterface implements UserInterface {
 	
 	private SecurePaymentCardRecord getSecurePayementCardDataFromServer() {
 		sendMessageToUserIfVerbose("Obtention de la signature du dernier solde, "
-				+ "ainsi que la clé publique, auprès du serveur ...");
+				+ "ainsi que la clé publique, auprès du serveur");
 		
 		HttpResponseBodyUnionType<SecurePaymentCardRecord> httpResponse = 
 				serverCommunicationChannel.getSecurePaymentCardRecord(securePayementCardID);
@@ -273,7 +275,7 @@ public abstract class SessionUserInterface implements UserInterface {
 	
 	private boolean updateSecurePayementCardData() {
 		sendMessageToUserIfVerbose("Mise à jour de la signature du solde, "
-				+ "ainsi que de la clé publique, auprès du serveur ...");
+				+ "ainsi que de la clé publique, auprès du serveur");
 		
 		byte[] publicKey = Crypto.getByteArrayFromPublicKey((ECPublicKey) clientKeyPair.getPublic());
 		HttpResponseBodyUnionType<OperationResult> httpResponse = 
@@ -319,7 +321,7 @@ public abstract class SessionUserInterface implements UserInterface {
 							sendMessageToUser("Le message ne peut pas être déchiffré.");
 							operationResult = false;
 						} else {
-							sendMessageToUserIfVerbose(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
+							sendMessageToUserIfDebug(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
 							byte[] balanceBytes = Crypto.getPlainTextAssociatedWithSignature(decryptedValue, 2);
 							this.balance = Util.bytesToShort(balanceBytes);
 							if (!Crypto.verifySignature(signatureObject, balanceBytes, balanceSignature)) {

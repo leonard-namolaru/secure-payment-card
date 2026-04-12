@@ -54,7 +54,7 @@ public class JavaCardClient {
 		}
 		
 		if (waitForCardPresent(10000)) {
-			this.userInterface.sendMessageToUserIfVerbose(String.format("Connexion établie : %s", cardTerminal.getName()));
+			this.userInterface.sendMessageToUserIfVerbose(String.format("Connexion avec le terminal de carte établie."));
 		} else {
 			this.userInterface.sendMessageToUser("La connexion a échoué (timeout)");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
@@ -125,7 +125,7 @@ public class JavaCardClient {
 	}
 	
 	private boolean waitForCardPresent(long timeout) {
-		userInterface.sendMessageToUserIfVerbose("Connexion en cours ...");
+		userInterface.sendMessageToUserIfVerbose("Connexion avec le terminal de carte en cours ...");
 		
 		boolean result = true;
 		try {

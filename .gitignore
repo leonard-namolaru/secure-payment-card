@@ -10,6 +10,13 @@ SecurePaymentCard/bin
 SecurePaymentCard/deliverables
 SecurePaymentCard/configurations
 
+securePaymentCardGraphicalInterface/node_modules
+# securePaymentCardGraphicalInterface/dist
+securePaymentCardGraphicalInterface/out
+securePaymentCardGraphicalInterface/.DS_Store
+securePaymentCardGraphicalInterface/.eslintcache
+securePaymentCardGraphicalInterface/*.log*
+
 ### .env ###
 SecurePaymentCardClient/.env
 SecurePaymentCardServer/.env
@@ -29,7 +36,7 @@ SecurePaymentCard/.settings
 SecurePaymentCard/.factorypath
 
 ### IntelliJ IDEA ###
-SecurePaymentCardServer/.idea
+.idea
 SecurePaymentCardServer/*.iws
 SecurePaymentCardServer/*.iml
 SecurePaymentCardServer/*.ipr

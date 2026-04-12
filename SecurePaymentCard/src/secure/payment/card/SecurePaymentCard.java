@@ -5,6 +5,12 @@ import javacardx.security.cert.Certificate;
 import javacardx.security.util.MonotonicCounter;
 
 import javacard.framework.Util;
+
+import org.globalplatform.Application;
+import org.globalplatform.GPRegistryEntry;
+import org.globalplatform.GPSystem;
+import org.globalplatform.Personalization;
+
 import javacard.framework.APDU;
 import javacard.framework.Applet;
 import javacard.framework.ISO7816;
@@ -27,7 +33,10 @@ import javacard.security.MessageDigest;
 import javacard.security.CryptoException;
 import javacard.security.NamedParameterSpec;
 
-public class SecurePaymentCard extends Applet {
+public class SecurePaymentCard extends Applet /* implements Personalization, Application */ {
+    private byte[] storedData = new byte[256];
+    private short storedLength = 0;
+
 	private short certificateOffset;
     private byte[] certificateBuffer;
 	private Certificate clientCertificate;
@@ -36,7 +45,7 @@ public class SecurePaymentCard extends Applet {
 	private AESKey aesKey;
 	private Cipher aesCipherDecryptObject;
 	private Cipher aesCipherEncryptObject;
-
+	
     private short balance;
     private byte[] balanceSignature;
     private final OwnerPIN ownerPin;
@@ -97,15 +106,17 @@ public class SecurePaymentCard extends Applet {
         	ISOException.throwIt((short) (SecurePaymentCardConstants.SW_PIN_EXCEPTION_PREFIX | SecurePaymentCardConstants.SW_PIN_TOO_SMALL));
         }
         pin.update(installParameters, (short) (appletDataLengthOffset + 1 + SecurePaymentCardConstants.CARD_ID_LENGTH), SecurePaymentCardConstants.PIN_SIZE);
-    	
+
         byte[] securePayementCardID = new byte[SecurePaymentCardConstants.CARD_ID_LENGTH];
-        
+  
         // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
         Util.arrayCopy(installParameters, (short) (appletDataLengthOffset + 1), securePayementCardID, (short) 0, (short) SecurePaymentCardConstants.CARD_ID_LENGTH);
         
+        // GPSystem.getRegistryEntry(JCSystem.getAID()).setState(GPSystem.SECURITY_DOMAIN_PERSONALIZED);
+        
         SecurePaymentCard securePaymentCard = new SecurePaymentCard(pin, counter, cardSignature, serverSignature, 
     			cardSignatureCheck, keyPair, clientPublicKey, (short) 0, securePayementCardID, null);
-    	securePaymentCard.register();	
+    	securePaymentCard.register();
     }
     
     // JCRE 11.2.1
@@ -173,6 +184,7 @@ public class SecurePaymentCard extends Applet {
     
     @Override
     public void process(APDU incomingApduCommand) {
+    	
         try {
         	// L'objet APDU contient un tableau d'octets (tampon) pour transférer les commandes et les réponses APDU 
         	// entrantes et sortantes entre l'application cliente et l'applet.
@@ -268,7 +280,7 @@ public class SecurePaymentCard extends Applet {
     private void getClientCertificate(APDU apdu) {
     	byte[] buffer = apdu.getBuffer();
         short byteRead = apdu.setIncomingAndReceive();
-        boolean isLastMessage = buffer[ISO7816.OFFSET_P2] == 0x01;
+        boolean isLastMessage = buffer[ISO7816.OFFSET_P1] == 0x01;
 
         // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
         Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, certificateBuffer, this.certificateOffset, byteRead);
@@ -517,4 +529,21 @@ public class SecurePaymentCard extends Applet {
     	// verify​(byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset, short sigLength)
     	return clientSignature.verify(input, messageOffset, messageLength, input, (short) (messageOffset + messageLength), signatureLength);
     }
+    
+    //@Override
+	public short processData(byte[] inBuffer, short inOffset, short inLength, byte[] outBuffer, short outOffset) {
+        short dataOffset = (short) (inOffset + 5);
+        short dataLength = (short) (inBuffer[(short) (inOffset + 4)] & 0xFF);
+        Util.arrayCopy(inBuffer, dataOffset, storedData, (short) 0, dataLength);
+        storedLength = dataLength;
+        return 0;
+	}
+    
+    //@Override
+	public void processData(byte[] baBuffer, short sOffset, short sLength) {
+        short dataOffset = (short) (sOffset + 5);
+        short dataLength = (short) (baBuffer[(short) (sOffset + 4)] & 0xFF);
+        Util.arrayCopy(baBuffer, dataOffset, storedData, (short) 0, dataLength);
+        storedLength = dataLength;		
+	}
 }

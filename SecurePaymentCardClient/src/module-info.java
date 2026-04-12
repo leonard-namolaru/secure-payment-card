@@ -14,4 +14,5 @@ module SecurePaymentCardClient {
 	requires java.net.http;
 	requires com.google.gson;
 	requires org.bouncycastle.pkix;
+	requires org.java_websocket;
 }
