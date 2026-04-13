@@ -1,3 +1,5 @@
+import lockIcon from '../assets/lock-fill.svg'
+
 import {
   CLOSE_CLIENT_INTERFACE,
   DEPLOY,
@@ -43,15 +45,23 @@ function ClientInterface({
 
         <div className="col-10 col-sm-8 col-lg-6">
           <div
-            className="card text-bg-light d-block mx-lg-auto img-fluid"
-            style={{ width: 800, height: 250 }}
+            className="card text-bg-light d-block mx-lg-auto img-fluid showing shadow-sm"
+            style={{ width: 800, height: 250, background: '#afc5df !important' }}
           >
             <div className="card-img-overlay">
-              <h5 className="card-title">{securePaymentCardID}</h5>
-              <p className="card-text">{balance >= 0 ? `Solde : ${balance}` : ``}</p>
+              <h5 className="card-title">
+                {securePaymentCardID.length > 0
+                  ? securePaymentCardID
+                  : 'CARD-00000000-000000-00000'}
+              </h5>
               <p className="card-text">
-                <small>...</small>
+                {balance >= 0 ? `Solde : ${balance}` : `Solde : -`}
+                <br />
+                <small>Secure Payment Card</small>
               </p>
+              <div className="row">
+                <i className="bi bi-lock fs-2 mb-3"></i>
+              </div>
             </div>
           </div>
         </div>

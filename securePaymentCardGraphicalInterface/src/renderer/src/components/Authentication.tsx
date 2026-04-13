@@ -66,10 +66,14 @@ function Authentication({
               />
               <label htmlFor="floatingPassword">Mot de passe</label>
             </div>
-            <button className="w-100 btn btn-lg btn-primary" onClick={() => {
-              handleAuthentication(webSocket, email, password, setLogs);
-            }}>
-              Se connecter
+            <button
+              className="w-100 btn btn-lg btn-primary"
+              onClick={() => {
+                handleAuthentication(webSocket, email, password, setLogs)
+              }}
+            >
+              <i className="bi bi-box-arrow-right"></i>
+              &nbsp;Se connecter
             </button>
             <hr className="my-4" />
             <small className="text-body-secondary">...</small>

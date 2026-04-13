@@ -1,4 +1,4 @@
-import electronLogo from '../assets/electron.svg'
+import logo from '../assets/credit-card-2-back-fill.svg'
 
 interface HeaderPropos {
   logs: string[]
@@ -10,12 +10,25 @@ interface HeaderPropos {
 function Header({ logs, connected, closeWebSocketFunction, connectWebSocketFunction }: HeaderPropos): React.JSX.Element {
   return (
     <div className="px-4 py-5 my-5 text-center">
-      <img className="d-block mx-auto mb-4" src={electronLogo} alt="" width="72" height="57" />
+      <img
+        className="d-block mx-auto mb-4"
+        src={logo}
+        alt="Secure Payment Card"
+        width="92"
+        height="77"
+      />
       <h1 className="display-5 fw-bold text-body-emphasis">Secure Payment Card</h1>
       <div className="col-lg-6 mx-auto">
         <div className="lead mb-4">
           {logs.map((log: string, index: number) =>
-            (logs.length - index) <= 5 ? <p key={index}>{log}</p> : <span key={index}></span>
+            logs.length - index <= 5 ? (
+              <p key={index}>
+                <i className="bi bi-info-square"></i>
+                &nbsp;{log}
+              </p>
+            ) : (
+              <span key={index}></span>
+            )
           )}
         </div>
         <div className="d-grid gap-2 d-sm-flex justify-content-sm-center">
@@ -27,7 +40,8 @@ function Header({ logs, connected, closeWebSocketFunction, connectWebSocketFunct
                 connectWebSocketFunction()
               }}
             >
-              Connexion
+              <i className="bi bi-chevron-compact-right"></i>
+              &nbsp;Connexion
             </button>
           ) : (
             <></>
@@ -41,7 +55,8 @@ function Header({ logs, connected, closeWebSocketFunction, connectWebSocketFunct
                 closeWebSocketFunction()
               }}
             >
-              Déconnexion
+              <i className="bi bi-box-arrow-left"></i>
+              &nbsp;Déconnexion
             </button>
           ) : (
             <></>
