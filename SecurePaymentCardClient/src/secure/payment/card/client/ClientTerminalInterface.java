@@ -1,6 +1,6 @@
 package secure.payment.card.client;
 
-import secure.payment.card.client.HttpPayload.AuthenticationRequest;
+import secure.payment.card.client.JsonPayload.AuthenticationRequest;
 
 public class ClientTerminalInterface extends ClientUserInterface {	
 	public ClientTerminalInterface(String serverBaseUrl, String host, int port, boolean debug, boolean verbose) {

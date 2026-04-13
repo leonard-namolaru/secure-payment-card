@@ -1,8 +1,8 @@
 package secure.payment.card.client;
 
-public class HttpPayload {
+public class JsonPayload {
 	
-	public static class HttpResponseBodyUnionType<T extends AbstractHttpPayload> {
+	public static class HttpResponseBodyUnionType<T extends AbstractJsonPayload> {
 		private T expectedResponseBody;
 		private ErrorResponse errorResponse;
 		
@@ -32,7 +32,7 @@ public class HttpPayload {
 		}
 	}
 	
-	public static class AuthenticationRequest extends AbstractHttpPayload {
+	public static class AuthenticationRequest extends AbstractJsonPayload {
 		public String email;
 		public String password;
 		
@@ -46,7 +46,7 @@ public class HttpPayload {
 		}
 	}
 	
-	public static class AuthenticationResponse extends AbstractHttpPayload {
+	public static class AuthenticationResponse extends AbstractJsonPayload {
 	    public String token;
 	    public String expiresIn;
 	    
@@ -60,7 +60,7 @@ public class HttpPayload {
 	    }
 	}
 	
-	public static class SecurePaymentCardRecord extends AbstractHttpPayload {
+	public static class SecurePaymentCardRecord extends AbstractJsonPayload {
 		public String publicKey;
 	    public String balanceSignature;
 	    
@@ -74,7 +74,7 @@ public class HttpPayload {
 	    }
 	}
 	
-	public static class SecurePaymentCardCreationResponse extends AbstractHttpPayload {
+	public static class SecurePaymentCardCreationResponse extends AbstractJsonPayload {
 		public String securePaymentCardId;
 
 		public SecurePaymentCardCreationResponse() {
@@ -86,7 +86,7 @@ public class HttpPayload {
 	    }
 	}
 	
-	public static class ErrorResponse extends AbstractHttpPayload {
+	public static class ErrorResponse extends AbstractJsonPayload {
 	    public String code;
 	    public String message;
 	    public String description;
@@ -107,7 +107,7 @@ public class HttpPayload {
 	    }
 	}
 	
-	public static class OperationResult extends AbstractHttpPayload {
+	public static class OperationResult extends AbstractJsonPayload {
 	    public String message;
 	    
 	    public OperationResult() {
@@ -122,4 +122,17 @@ public class HttpPayload {
 	    	return message.equalsIgnoreCase("La mise à jour a réussi.");
 	    }
 	}
+	
+	public static class Transaction extends AbstractJsonPayload {
+	    public String amount;
+	    
+	    public Transaction() {
+	    	
+	    }
+	    
+	    public Transaction(String amount) {
+	    	this.amount = amount;
+	    }
+	}
+
 }

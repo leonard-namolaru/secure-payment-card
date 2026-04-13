@@ -1,36 +1,40 @@
 import {
   CLOSE_CLIENT_INTERFACE,
   DEPLOY,
-  SEPARATOR_CHAR,
+  GUI_SEPARATOR_CHAR,
   setState,
   START_OR_RESUME_SESSION,
   UNINSTALL
 } from '@renderer/App'
 
 interface ClientInterfacePropos {
+  balance: number
   webSocket: WebSocket
   sessionStarted: boolean
+  securePaymentCardID: string
 }
 
 function deploy(webSocket: WebSocket): void {
-  webSocket.send(`${DEPLOY}${SEPARATOR_CHAR}`);
+  webSocket.send(`${DEPLOY}${GUI_SEPARATOR_CHAR}`);
 }
 
 function startOrResumeSession(webSocket: WebSocket): void {
-  webSocket.send(`${START_OR_RESUME_SESSION}${SEPARATOR_CHAR}`);
+  webSocket.send(`${START_OR_RESUME_SESSION}${GUI_SEPARATOR_CHAR}`);
 }
 
 function uninstall(webSocket: WebSocket): void {
-  webSocket.send(`${UNINSTALL}${SEPARATOR_CHAR}`);
+  webSocket.send(`${UNINSTALL}${GUI_SEPARATOR_CHAR}`);
 }
 
 function closeClientInterface(webSocket: WebSocket): void {
-  webSocket.send(`${CLOSE_CLIENT_INTERFACE}${SEPARATOR_CHAR}`);
+  webSocket.send(`${CLOSE_CLIENT_INTERFACE}${GUI_SEPARATOR_CHAR}`);
 }
 
 function ClientInterface({
+  balance,
   webSocket,
   sessionStarted,
+  securePaymentCardID
 }: ClientInterfacePropos): React.JSX.Element {
   return (
     <div className="container col-xxl-8 px-4 py-5">
@@ -43,8 +47,8 @@ function ClientInterface({
             style={{ width: 800, height: 250 }}
           >
             <div className="card-img-overlay">
-              <h5 className="card-title">CARD-20260412-181049-00338</h5>
-              <p className="card-text">Solde : 100</p>
+              <h5 className="card-title">{securePaymentCardID}</h5>
+              <p className="card-text">{balance >= 0 ? `Solde : ${balance}` : ``}</p>
               <p className="card-text">
                 <small>...</small>
               </p>

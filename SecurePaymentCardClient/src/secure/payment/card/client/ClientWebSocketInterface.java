@@ -1,6 +1,6 @@
 package secure.payment.card.client;
 
-import secure.payment.card.client.HttpPayload.AuthenticationRequest;
+import secure.payment.card.client.JsonPayload.AuthenticationRequest;
 
 public class ClientWebSocketInterface extends ClientUserInterface {	
 
@@ -84,6 +84,10 @@ public class ClientWebSocketInterface extends ClientUserInterface {
 	
 	@Override
 	public void sendMessageToUser(String message) {
+		if (message.trim().equals("\n")) {
+			return;
+		}
+		
 		if (SecurePaymentCardClient.webSocketCommunicationChannel != null) {
 			System.out.println(message);		
 			SecurePaymentCardClient.webSocketCommunicationChannel.broadcast(message);

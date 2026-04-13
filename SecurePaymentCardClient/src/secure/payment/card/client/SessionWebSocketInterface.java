@@ -66,6 +66,7 @@ public class SessionWebSocketInterface extends SessionUserInterface {
 			return;
 		}
 		
+		System.out.println(SecurePaymentCardClient.webSocketCommunicationChannel);		
 		if (SecurePaymentCardClient.webSocketCommunicationChannel != null) {
 			System.out.println(message);		
 			SecurePaymentCardClient.webSocketCommunicationChannel.broadcast(message);

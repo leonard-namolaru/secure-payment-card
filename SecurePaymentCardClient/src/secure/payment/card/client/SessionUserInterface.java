@@ -14,9 +14,9 @@ import java.security.interfaces.ECPrivateKey;
 import java.security.NoSuchProviderException;
 import java.security.NoSuchAlgorithmException;
 
-import secure.payment.card.client.HttpPayload.OperationResult;
-import secure.payment.card.client.HttpPayload.SecurePaymentCardRecord;
-import secure.payment.card.client.HttpPayload.HttpResponseBodyUnionType;
+import secure.payment.card.client.JsonPayload.OperationResult;
+import secure.payment.card.client.JsonPayload.SecurePaymentCardRecord;
+import secure.payment.card.client.JsonPayload.HttpResponseBodyUnionType;
 
 public abstract class SessionUserInterface implements UserInterface {
 	private Key aesKey;
@@ -134,6 +134,7 @@ public abstract class SessionUserInterface implements UserInterface {
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
+		sendMessageToUser("Solde : " + balance);
 		sendMessageToUser("La session a démarré");
 	}
 	
@@ -368,7 +369,7 @@ public abstract class SessionUserInterface implements UserInterface {
 				sendMessageToUser("Le message ne peut pas être déchiffré.");
 				return;
 			}
-			sendMessageToUserIfVerbose(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
+			sendMessageToUserIfDebug(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
 
 			if (Crypto.verifyResponseApduSignature(cardSignatureObject, decryptedValue, 6)) {
 				int cardCounter = Util.bytesToInt(decryptedValue, 2, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE);
@@ -394,11 +395,12 @@ public abstract class SessionUserInterface implements UserInterface {
 				sendMessageToUser("Le message ne peut pas être déchiffré.");
 				return;
 			}
-			sendMessageToUserIfVerbose(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
+			sendMessageToUserIfDebug(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
 
 			if (Crypto.verifyResponseApduSignature(cardSignatureObject, decryptedValue, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2) ) {
 				sendMessageToUserIfVerbose("L'intégrité de la réponse a été vérifiée et confirmée.");
 				updateBalanceAfterDebit(debitValue);
+				sendMessageToUserIfVerbose("Solde : " + balance);
 			} else {
 				sendMessageToUser("Il semblerait que la réponse ait été modifiée pendant le transport.");
 				System.exit(SecurePaymentCardConstants.EXIT_FAILURE);
@@ -416,9 +418,10 @@ public abstract class SessionUserInterface implements UserInterface {
 				sendMessageToUser("Le message ne peut pas être déchiffré.");
 				return;
 			}
-			sendMessageToUserIfVerbose(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
+			sendMessageToUserIfDebug(String.format("\t\t     [APDU-R-DECRYPTED] [%s]", Util.convertByteArrayToString(decryptedValue)));
 			if (Crypto.verifyResponseApduSignature(cardSignatureObject, decryptedValue, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE + 2) ) {
 				updateBalanceAfterCredit(creditValue);
+				sendMessageToUserIfVerbose("Solde : " + balance);
 			} else {
 				sendMessageToUser("Il semblerait que la réponse ait été modifiée pendant le transport.");
 				System.exit(SecurePaymentCardConstants.EXIT_FAILURE);

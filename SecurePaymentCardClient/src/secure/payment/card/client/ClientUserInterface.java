@@ -25,10 +25,10 @@ import com.oracle.javacard.ams.AMService;
 import com.oracle.javacard.ams.config.CAPFile;
 import com.oracle.javacard.ams.AMServiceFactory;
 
-import secure.payment.card.client.HttpPayload.AuthenticationRequest;
-import secure.payment.card.client.HttpPayload.AuthenticationResponse;
-import secure.payment.card.client.HttpPayload.HttpResponseBodyUnionType;
-import secure.payment.card.client.HttpPayload.SecurePaymentCardCreationResponse;
+import secure.payment.card.client.JsonPayload.AuthenticationRequest;
+import secure.payment.card.client.JsonPayload.AuthenticationResponse;
+import secure.payment.card.client.JsonPayload.HttpResponseBodyUnionType;
+import secure.payment.card.client.JsonPayload.SecurePaymentCardCreationResponse;
 
 public abstract class ClientUserInterface implements UserInterface {
 	private JavaCardClient javaCardClient;
@@ -177,7 +177,11 @@ public abstract class ClientUserInterface implements UserInterface {
 			sendMessageToUser("Une erreur de communication avec le serveur a empêché l'enregistrement de la nouvelle carte.");
 			return;
 		}
-		
+		sendMessageToUserIfVerbose("\n");
+		sendMessageToUser(String.format("ID : %s", securePayementCardID));
+		sendMessageToUser("Solde : 0");
+		sendMessageToUserIfVerbose("\n");
+
 		AMSession deployObject = createDeployObject(SecurePaymentCardClient.sAID_CAP, capFilePath, pin, securePayementCardID);
 		
 		sendMessageToUserIfDebug("Install");

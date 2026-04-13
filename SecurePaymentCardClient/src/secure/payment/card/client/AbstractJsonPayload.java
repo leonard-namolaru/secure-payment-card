@@ -11,22 +11,22 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonDeserializationContext;
 
-public abstract class AbstractHttpPayload implements JsonSerializer<AbstractHttpPayload>, JsonDeserializer<AbstractHttpPayload> {
+public abstract class AbstractJsonPayload implements JsonSerializer<AbstractJsonPayload>, JsonDeserializer<AbstractJsonPayload> {
 	
-	public AbstractHttpPayload() {	
+	public AbstractJsonPayload() {	
 		
 	}
 	
 	@Override
-	public AbstractHttpPayload deserialize(JsonElement json, Type typeOfDst, JsonDeserializationContext context)
+	public AbstractJsonPayload deserialize(JsonElement json, Type typeOfDst, JsonDeserializationContext context)
 			throws JsonParseException {
-		AbstractHttpPayload dst = null;
+		AbstractJsonPayload dst = null;
 		JsonObject jsonObject = json.getAsJsonObject();
 	
 		Object object = Util.createNewObjectInstanceByTypeName(this.getClass().getTypeName());
 		
 		if (object != null) {
-			dst = (AbstractHttpPayload) object;
+			dst = (AbstractJsonPayload) object;
 			for (Field field : dst.getClass().getDeclaredFields()) {
 				try {
 					String fieldValue = jsonObject.get(field.getName()).getAsString();
@@ -46,7 +46,7 @@ public abstract class AbstractHttpPayload implements JsonSerializer<AbstractHttp
 	}
 
 	@Override
-	public JsonElement serialize(AbstractHttpPayload src, Type typeOfSrc, JsonSerializationContext context) {
+	public JsonElement serialize(AbstractJsonPayload src, Type typeOfSrc, JsonSerializationContext context) {
 		JsonObject jsonObject = new JsonObject();
 		
 		for (Field field : getClass().getDeclaredFields()) {

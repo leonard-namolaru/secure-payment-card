@@ -17,13 +17,13 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpRequest.Builder;
 import java.net.http.HttpTimeoutException;
 
-import secure.payment.card.client.HttpPayload.ErrorResponse;
-import secure.payment.card.client.HttpPayload.OperationResult;
-import secure.payment.card.client.HttpPayload.AuthenticationRequest;
-import secure.payment.card.client.HttpPayload.AuthenticationResponse;
-import secure.payment.card.client.HttpPayload.SecurePaymentCardRecord;
-import secure.payment.card.client.HttpPayload.HttpResponseBodyUnionType;
-import secure.payment.card.client.HttpPayload.SecurePaymentCardCreationResponse;
+import secure.payment.card.client.JsonPayload.ErrorResponse;
+import secure.payment.card.client.JsonPayload.OperationResult;
+import secure.payment.card.client.JsonPayload.AuthenticationRequest;
+import secure.payment.card.client.JsonPayload.AuthenticationResponse;
+import secure.payment.card.client.JsonPayload.SecurePaymentCardRecord;
+import secure.payment.card.client.JsonPayload.HttpResponseBodyUnionType;
+import secure.payment.card.client.JsonPayload.SecurePaymentCardCreationResponse;
 
 public class ServerCommunicationChannel {
 	private String baseUrl;
@@ -70,7 +70,7 @@ public class ServerCommunicationChannel {
     	return handleHttpRequest("/api/v1/", HttpMethodEnum.POST, securePaymentCardRecord, new SecurePaymentCardCreationResponse(), true);
 	}
 	
-	public <T extends AbstractHttpPayload, G extends AbstractHttpPayload> HttpResponseBodyUnionType<G> handleHttpRequest
+	public <T extends AbstractJsonPayload, G extends AbstractJsonPayload> HttpResponseBodyUnionType<G> handleHttpRequest
 	(String path, HttpMethodEnum httpMethod, T requestPayload, G expectedResponsePayloadClass, boolean useAccessToken) {
 		userInterface.sendMessageToUserIfDebug(String.format("Requête HTTP : %s", baseUrl + path));
 

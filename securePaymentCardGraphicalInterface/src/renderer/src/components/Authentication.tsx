@@ -1,4 +1,4 @@
-import { AUTHENTICATION_REQUEST, SEPARATOR_CHAR, setState } from '@renderer/App'
+import { AUTHENTICATION_REQUEST, GUI_SEPARATOR_CHAR, setState } from '@renderer/App'
 
 interface AuthenticationPropos {
   email: string
@@ -20,7 +20,7 @@ function handleAuthentication(webSocket: WebSocket, email: string, password: str
   }
 
   const object = {email: email, password: password};
-  webSocket.send(`${AUTHENTICATION_REQUEST}${SEPARATOR_CHAR}${JSON.stringify(object)}`);
+  webSocket.send(`${AUTHENTICATION_REQUEST}${GUI_SEPARATOR_CHAR}${JSON.stringify(object)}`);
 }
 
 function Authentication({
