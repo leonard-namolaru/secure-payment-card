@@ -135,4 +135,15 @@ public class JsonPayload {
 	    }
 	}
 
+	public static class UserPin extends AbstractJsonPayload {
+	    public String pin;
+	    
+	    public UserPin() {
+	    	
+	    }
+	    
+	    public UserPin(String pin) {
+	    	this.pin = pin;
+	    }
+	}
 }

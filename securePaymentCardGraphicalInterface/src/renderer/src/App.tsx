@@ -7,6 +7,9 @@ import Authentication from '@renderer/components/Authentication'
 import ClientInterface from '@renderer/components/ClientInterface'
 import SessionInterface from '@renderer/components/SessionInterface'
 
+export const USER_PIN_LENGTH: number = 6;
+
+export const PIN_SEPARATOR_CHAR: string = ",";
 export const GUI_SEPARATOR_CHAR: string = "|";
 export const CLIENT_SEPARATOR_CHAR: string = ':';
 
@@ -23,6 +26,8 @@ export const UNINSTALL: number = 3;
 export const CLOSE_CLIENT_INTERFACE: number = 4;
 export const DEBIT: number = 5;
 export const CREDIT: number = 6;
+export const INSTALL_PIN: number = 7
+export const AUTH_PIN: number = 8
 
 export type Nullable<T> = T | null;
 export type setState<T> = Dispatch<SetStateAction<T>>;
@@ -157,6 +162,10 @@ function App(): React.JSX.Element {
   const [balance, setBalance] = useState<number>(-1)
   const [securePaymentCardID, setSecurePaymentCardID] = useState<string>('')
 
+  const [startSessionMode, setStartSessionMode] = useState<boolean>(false)
+  const [showPinInput, setShowPinInput] = useState<boolean>(false)
+  const [pinStr, setPinStr] = useState<string[]>(['', '', '', '', '', ''])
+
   const [logs, setLogs] = useState<string[]>([])
   const [connected, setConnected] = useState<boolean>(false)
   const [authenticated, setAuthenticated] = useState<boolean>(false)
@@ -211,12 +220,19 @@ function App(): React.JSX.Element {
 
       {webSocketObject !== null && connected && authenticated ? (
         <ClientInterface
+          startSessionMode={startSessionMode}
+          pinStr={pinStr}
+          balance={balance}
+          setLogs={setLogs}
+          setStartSessionMode={setStartSessionMode}
+          setPinStr={setPinStr}
+          showPinInput={showPinInput}
           webSocket={webSocketObject}
+          sessionStarted={sessionStarted}
+          setShowPinInput={setShowPinInput}
           setAuthenticated={setAuthenticated}
           setSessionStarted={setSessionStarted}
-          sessionStarted={sessionStarted}
           securePaymentCardID={securePaymentCardID}
-          balance={balance}
         />
       ) : (
         <></>

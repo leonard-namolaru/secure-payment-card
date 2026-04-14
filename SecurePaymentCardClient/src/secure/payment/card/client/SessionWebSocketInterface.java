@@ -8,56 +8,19 @@ public class SessionWebSocketInterface extends SessionUserInterface {
 
 	@Override
 	protected void run() {
-		/*
-		int userChoice;
 		
-		do {
-			System.out.println("\n");
-			System.out.println("MENU");
-			System.out.println("=============================================");
-			System.out.println("1 - Consulter le solde de la carte");
-			System.out.println("2 - Débiter la carte");
-			System.out.println("3 - Recharger la carte");
-			System.out.println("4 - Fin");
-			
-			System.out.print("Votre choix : ");
-			userChoice = SecurePaymentCardClient.scanner.nextByte();
-
-			switch (userChoice) {
-				case 1: System.out.println("\n");
-						System.out.println("CONSULTATION DU SOLDE DE LA CARTE");
-						System.out.println("=============================================");
-						getBalance();
-						break;
-						
-				case 2: System.out.println("\n");
-						System.out.println("DÉBITER LA CARTE");
-						System.out.println("=============================================");
-						System.out.print("Montant : ");
-						int debitValue = SecurePaymentCardClient.scanner.nextByte();
-						debit((byte) debitValue);
-						break;
-						
-				case 3: System.out.println("\n");
-						System.out.println("RECHARGER LA CARTE");
-						System.out.println("=============================================");
-						System.out.print("Montant : ");
-						int creditValue = SecurePaymentCardClient.scanner.nextByte();
-						credit((byte) creditValue);
-						break;
-						
-				case 4 : 
-					    break;
-				default: System.out.println("Valeur invalide");
-			}
-			
-		} while (userChoice != 4);
-		*/
 	}
 
 	@Override
 	protected byte[] getUserPin() {
-		return SecurePaymentCardClient.pin;
+		byte[] userPin = SecurePaymentCardClient.webSocketCommunicationChannel.userPin;
+		if (userPin == null) {
+			sendMessageToUser("Il est obligatoire de saisir un code PIN");
+			return new byte[] {0x00};
+		}
+		
+		SecurePaymentCardClient.webSocketCommunicationChannel.userPin = null;
+		return userPin;
 	}
 
 	@Override
@@ -67,7 +30,6 @@ public class SessionWebSocketInterface extends SessionUserInterface {
 			return;
 		}
 		
-		System.out.println(SecurePaymentCardClient.webSocketCommunicationChannel);		
 		if (SecurePaymentCardClient.webSocketCommunicationChannel != null) {
 			System.out.println(message);		
 			SecurePaymentCardClient.webSocketCommunicationChannel.broadcast(message);

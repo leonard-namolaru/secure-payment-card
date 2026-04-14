@@ -1,5 +1,7 @@
 package secure.payment.card.client;
 
+import java.util.InputMismatchException;
+
 import secure.payment.card.client.JsonPayload.AuthenticationRequest;
 
 public class ClientTerminalInterface extends ClientUserInterface {	
@@ -58,7 +60,26 @@ public class ClientTerminalInterface extends ClientUserInterface {
 
 	@Override
 	protected byte[] getUserPin() {
-		return SecurePaymentCardClient.pin;
+		byte[] pin = new byte[SecurePaymentCardConstants.PIN_SIZE];
+		
+		System.out.println("Code PIN : ");
+		for(int i = 0; i < SecurePaymentCardConstants.PIN_SIZE; i++) {
+			System.out.print("# : ");
+			
+			boolean inputOk = false;
+			while (!inputOk) {
+				try {
+					int input = SecurePaymentCardClient.scanner.nextByte();
+					pin[i] = (byte) input;
+					inputOk = true;
+				} catch (InputMismatchException e) {
+					System.out.println("Valeur invalide");
+					inputOk = false;
+				}
+			}
+		}
+		
+		return pin;
 	}
 
 	@Override

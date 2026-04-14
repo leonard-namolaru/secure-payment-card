@@ -43,7 +43,6 @@ public abstract class ClientUserInterface implements UserInterface {
 	public ClientUserInterface(String serverBaseUrl, String host, int port, boolean debug, boolean verbose) {
 		this.debug = debug;
 		this.verbose = verbose;
-		
 		this.serverCommunicationChannel = new ServerCommunicationChannel(serverBaseUrl, this);
 		
 		this.javaCardClient = new JavaCardClient(host, port, this);
@@ -54,8 +53,6 @@ public abstract class ClientUserInterface implements UserInterface {
 		this.sessionUserInterface = null;
 		this.applicationManagementService = null;
 		this.cardCommunicationChannel = new CardCommunicationChannel(cardChannel, this);
-		
-		
 		
 		AuthenticationRequest authenticationRequest = createServerAuthenticationRequestObject();
 		if (authenticationRequest == null) {
@@ -251,7 +248,6 @@ public abstract class ClientUserInterface implements UserInterface {
 			sendMessageToUser("L'installation a échoué.");
 		}
 	}
-
 	
 	protected void startOrResumeSession() {
 		if (sessionUserInterface == null) {

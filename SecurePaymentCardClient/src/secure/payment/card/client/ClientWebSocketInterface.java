@@ -11,55 +11,8 @@ public class ClientWebSocketInterface extends ClientUserInterface {
 	@Override
 	protected void run() {
 		
-		
-		
-		
-		//disconnect();
     }
 
-		/**
-		int userChoice;
-		do {
-			System.out.println("\n");
-			System.out.println("MENU");
-			System.out.println("=============================================");
-			System.out.println("1 - Déployer");
-			System.out.println("2 - Démarrage / reprise d'une session");
-			System.out.println("3 - Désinstaller");
-			System.out.println("4 - Fin");
-			
-			System.out.print("Votre choix : ");
-			userChoice = SecurePaymentCardClient.scanner.nextByte();
-
-			switch (userChoice) {
-				case 1: System.out.println("\n");
-						System.out.println("DÉPLOYER");
-						System.out.println("=============================================");
-						deploy();
-						break;
-						
-				case 2: System.out.println("\n");
-						System.out.println("DÉMARRAGE / REPRISE D'UNE SESSION");
-						System.out.println("=============================================");
-						startOrResumeSession();
-						break;
-						
-				case 3: System.out.println("\n");
-						System.out.println("DÉSINSTALLER");
-						System.out.println("=============================================");
-						uninstall();
-						break;
-						
-				case 4 : break;
-				default: System.out.println("Valeur invalide");
-			}
-			
-		} while (userChoice != 4);
-		*/
-		/*
-		disconnect();
-	}
-	*/
 
 	@Override
 	protected SessionUserInterface startSession() {
@@ -69,7 +22,14 @@ public class ClientWebSocketInterface extends ClientUserInterface {
 
 	@Override
 	protected byte[] getUserPin() {
-		return SecurePaymentCardClient.pin;
+		byte[] userPin = SecurePaymentCardClient.webSocketCommunicationChannel.userPin;
+		if (userPin == null) {
+			sendMessageToUser("Il est obligatoire de saisir un code PIN");
+			return new byte[] {0x00};
+		}
+		
+		SecurePaymentCardClient.webSocketCommunicationChannel.userPin = null;
+		return userPin;
 	}
 
 	@Override

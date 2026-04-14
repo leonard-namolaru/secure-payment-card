@@ -7,7 +7,6 @@ import {
   GUI_SEPARATOR_CHAR,
   setState
 } from '@renderer/App'
-import { useState } from 'react'
 
 interface SessionInterfacePropos {
   webSocket: WebSocket

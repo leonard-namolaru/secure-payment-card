@@ -208,6 +208,8 @@ public abstract class SessionUserInterface implements UserInterface {
 		if (response.getSW() != CardCommunicationChannel.STATUS_OK) {
 			sendMessageToUserIfVerbose(String.format("Échec de l'opération (SW:%04X)", response.getSW()));
 			verifyPinResult = false;
+		} else {
+			sendMessageToUserIfVerbose("Le code PIN est correct.");
 		}
 		
 		return verifyPinResult;
