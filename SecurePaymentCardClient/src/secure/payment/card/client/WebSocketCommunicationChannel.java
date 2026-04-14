@@ -1,16 +1,14 @@
 package secure.payment.card.client;
 
-import java.net.InetSocketAddress;
-import org.java_websocket.WebSocket;
-import java.net.UnknownHostException;
-
-import javax.xml.bind.helpers.ParseConversionEventImpl;
-
-import org.java_websocket.handshake.ClientHandshake;
-import org.java_websocket.server.WebSocketServer;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+
+import org.java_websocket.WebSocket;
+import org.java_websocket.server.WebSocketServer;
+import org.java_websocket.handshake.ClientHandshake;
 
 import secure.payment.card.client.JsonPayload.Transaction;
 import secure.payment.card.client.JsonPayload.AuthenticationRequest;
@@ -64,6 +62,10 @@ public class WebSocketCommunicationChannel extends WebSocketServer {
 	 @Override
 	 public void onClose(WebSocket connection, int code, String reason, boolean remote) {
 		 this.connection = null;
+		 if (clientWebSocketInterface != null) {
+			 clientWebSocketInterface.disconnect();
+			 clientWebSocketInterface = null;
+		 }
 	 }
 
 	 @Override
@@ -87,14 +89,19 @@ public class WebSocketCommunicationChannel extends WebSocketServer {
 		 
 		 switch (messageTypeId) {
 		 	case AUTHENTICATION_REQUEST: 
-		 			GsonBuilder httpResponseGsonBuilder = new GsonBuilder();
-		 			Gson httpResponseGson = httpResponseGsonBuilder.registerTypeAdapter(AuthenticationRequest.class, new AuthenticationRequest()).create();
-		 			String payload = message.substring(separatorCharIndex + 1, message.length());
+		 			if (this.clientWebSocketInterface != null) {
+						broadcast("La connexion précédente doit être fermée avant d'en ouvrir une nouvelle.");
+		 			} else {
+			 			GsonBuilder httpResponseGsonBuilder = new GsonBuilder();
+			 			Gson httpResponseGson = httpResponseGsonBuilder.registerTypeAdapter(AuthenticationRequest.class, new AuthenticationRequest()).create();
+			 			String payload = message.substring(separatorCharIndex + 1, message.length());
+			 			
+			 		    authenticationRequest = httpResponseGson.fromJson(payload, AuthenticationRequest.class);
+					 	ClientWebSocketInterface clientWebSocketInterface = new ClientWebSocketInterface(serverBaseUrl, cardTerminalHost, 
+							 cardTerminalPort, debug, verbose);
+					 	this.clientWebSocketInterface = clientWebSocketInterface;
+		 			}
 		 			
-		 		    authenticationRequest = httpResponseGson.fromJson(payload, AuthenticationRequest.class);
-				 	ClientWebSocketInterface clientWebSocketInterface = new ClientWebSocketInterface(serverBaseUrl, cardTerminalHost, 
-						 cardTerminalPort, debug, verbose);
-				 	this.clientWebSocketInterface = clientWebSocketInterface;
 				 	break;
 		 	case DEPLOY: 
 		 		if (this.clientWebSocketInterface != null) {
@@ -119,6 +126,7 @@ public class WebSocketCommunicationChannel extends WebSocketServer {
 		 	    break;
 		 	case CLOSE_CLIENT_INTERFACE: 
 		 		if (this.clientWebSocketInterface != null) {
+		 			this.clientWebSocketInterface.disconnect();
 		 			this.clientWebSocketInterface = null;
 		 		} else {
 					broadcast("Il est nécessaire de s'authentifier auprès du serveur avant d'effectuer cette opération.");
@@ -126,9 +134,9 @@ public class WebSocketCommunicationChannel extends WebSocketServer {
 		 	    break;
 		 	case DEBIT: 
 		 		if (this.clientWebSocketInterface != null) {
-		 			httpResponseGsonBuilder = new GsonBuilder();
-		 			httpResponseGson = httpResponseGsonBuilder.registerTypeAdapter(Transaction.class, new Transaction()).create();
-		 			payload = message.substring(separatorCharIndex + 1, message.length());
+		 			GsonBuilder httpResponseGsonBuilder = new GsonBuilder();
+		 			Gson httpResponseGson = httpResponseGsonBuilder.registerTypeAdapter(Transaction.class, new Transaction()).create();
+		 			String  payload = message.substring(separatorCharIndex + 1, message.length());
 		 			Transaction transaction = httpResponseGson.fromJson(payload, Transaction.class);
 		 			
 		 			int amount = 0;
@@ -150,9 +158,9 @@ public class WebSocketCommunicationChannel extends WebSocketServer {
 		 	    break;	 	
 		 	case CREDIT: 
 		 		if (this.clientWebSocketInterface != null) {
-		 			httpResponseGsonBuilder = new GsonBuilder();
-		 			httpResponseGson = httpResponseGsonBuilder.registerTypeAdapter(Transaction.class, new Transaction()).create();
-		 			payload = message.substring(separatorCharIndex + 1, message.length());
+		 			GsonBuilder httpResponseGsonBuilder = new GsonBuilder();
+		 			Gson httpResponseGson = httpResponseGsonBuilder.registerTypeAdapter(Transaction.class, new Transaction()).create();
+		 			String payload = message.substring(separatorCharIndex + 1, message.length());
 		 			Transaction transaction = httpResponseGson.fromJson(payload, Transaction.class);
 		 			
 		 			int amount = 0;

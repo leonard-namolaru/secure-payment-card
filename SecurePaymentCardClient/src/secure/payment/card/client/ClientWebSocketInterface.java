@@ -85,6 +85,7 @@ public class ClientWebSocketInterface extends ClientUserInterface {
 	@Override
 	public void sendMessageToUser(String message) {
 		if (message.trim().equals("\n")) {
+			System.out.println(message);		
 			return;
 		}
 		

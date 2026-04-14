@@ -41,6 +41,24 @@ interface SetAppElementsObject {
   setWebSocketObject: setState<Nullable<WebSocket>>
 }
 
+
+function reset(setAppElementsObject: SetAppElementsObject): void {
+  setAppElementsObject.setLogs([]);
+  setAppElementsObject.setBalance(-1);
+  setAppElementsObject.setWebSocketObject(null)
+
+  setAppElementsObject.setConnected(false)
+  setAppElementsObject.setAuthenticated(false);
+  setAppElementsObject.setSessionStarted(false);
+
+  setAppElementsObject.setEmail('')
+  setAppElementsObject.setPassword('')
+  setAppElementsObject.setTransactionMode('')
+  setAppElementsObject.setSecurePaymentCardID('')
+  setAppElementsObject.setTransactionAmountAsStr('')
+}
+
+
 function initWebSocketListeners(
   webSocket: WebSocket,
   setAppElementsObject: SetAppElementsObject
@@ -56,12 +74,17 @@ function initWebSocketListeners(
   webSocket.addEventListener('close', () => {
     setAppElementsObject.setLogs((prevState) => [...prevState, 'Fin de la connexion.'])
     setAppElementsObject.setConnected(false)
+    setAppElementsObject.setWebSocketObject(null)
   })
 
   webSocket.addEventListener('message', (e) => {
-    const message: string = e.data
+    const message: string = e.data.toString().trim().replaceAll("\n", "")
+    if (message.length === 0) {
+      return;
+    }
+
     if (message.trim() === "L'authentification auprès du serveur a réussi.") {
-      setAppElementsObject.setAuthenticated(true)
+        setAppElementsObject.setAuthenticated(true)
     }
 
     if (message.trim() === 'La session a démarré') {
@@ -96,18 +119,15 @@ function initWebSocketListeners(
   })
 
   webSocket.addEventListener('error', () => {
-    setAppElementsObject.setLogs((prevState) => [...prevState, `ERROR:`])
+    setAppElementsObject.setLogs((prevState) => [
+      ...prevState,
+      "Une erreur inattendue s'est produite."
+    ])
   })
 }
 
-
 function connectWebSocket(setAppElementsObject: SetAppElementsObject): WebSocket {
-  // Reset
-  setAppElementsObject.setLogs([])
-  setAppElementsObject.setConnected(false)
-  setAppElementsObject.setAuthenticated(false)
-  setAppElementsObject.setSessionStarted(false)
-  setAppElementsObject.setWebSocketObject(null)
+  reset(setAppElementsObject)
 
   const url = 'ws://127.0.0.1/'
   const webSocket: WebSocket = new WebSocket(url)
@@ -160,7 +180,6 @@ function App(): React.JSX.Element {
     setTransactionAmountAsStr: setTransactionAmountAsStr
   }
 
-
   return (
     <main>
       <Header
@@ -193,6 +212,8 @@ function App(): React.JSX.Element {
       {webSocketObject !== null && connected && authenticated ? (
         <ClientInterface
           webSocket={webSocketObject}
+          setAuthenticated={setAuthenticated}
+          setSessionStarted={setSessionStarted}
           sessionStarted={sessionStarted}
           securePaymentCardID={securePaymentCardID}
           balance={balance}

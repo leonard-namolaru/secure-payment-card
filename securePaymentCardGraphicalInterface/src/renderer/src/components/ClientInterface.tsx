@@ -1,5 +1,3 @@
-import lockIcon from '../assets/lock-fill.svg'
-
 import {
   CLOSE_CLIENT_INTERFACE,
   DEPLOY,
@@ -14,29 +12,42 @@ interface ClientInterfacePropos {
   webSocket: WebSocket
   sessionStarted: boolean
   securePaymentCardID: string
+  setSessionStarted: setState<boolean>
+  setAuthenticated: setState<boolean>
 }
 
-function deploy(webSocket: WebSocket): void {
-  webSocket.send(`${DEPLOY}${GUI_SEPARATOR_CHAR}`);
+
+function deploy(webSocket: WebSocket, setSessionStarted: setState<boolean>): void {
+  webSocket.send(`${DEPLOY}${GUI_SEPARATOR_CHAR}`)
+  setSessionStarted(false);
 }
 
 function startOrResumeSession(webSocket: WebSocket): void {
-  webSocket.send(`${START_OR_RESUME_SESSION}${GUI_SEPARATOR_CHAR}`);
+  webSocket.send(`${START_OR_RESUME_SESSION}${GUI_SEPARATOR_CHAR}`)
 }
 
-function uninstall(webSocket: WebSocket): void {
-  webSocket.send(`${UNINSTALL}${GUI_SEPARATOR_CHAR}`);
+function uninstall(webSocket: WebSocket, setSessionStarted: setState<boolean>): void {
+  webSocket.send(`${UNINSTALL}${GUI_SEPARATOR_CHAR}`)
+  setSessionStarted(false)
 }
 
-function closeClientInterface(webSocket: WebSocket): void {
-  webSocket.send(`${CLOSE_CLIENT_INTERFACE}${GUI_SEPARATOR_CHAR}`);
+function closeClientInterface(
+  webSocket: WebSocket,
+  setSessionStarted: setState<boolean>,
+  setAuthenticated: setState<boolean>
+): void {
+  webSocket.send(`${CLOSE_CLIENT_INTERFACE}${GUI_SEPARATOR_CHAR}`)
+  setAuthenticated(false)
+  setSessionStarted(false)
 }
 
 function ClientInterface({
   balance,
   webSocket,
   sessionStarted,
-  securePaymentCardID
+  securePaymentCardID,
+  setAuthenticated,
+  setSessionStarted
 }: ClientInterfacePropos): React.JSX.Element {
   return (
     <div className="container col-xxl-8 px-4 py-5">
@@ -72,10 +83,10 @@ function ClientInterface({
               type="button"
               className="btn btn-outline-success btn-lg px-4"
               onClick={() => {
-                deploy(webSocket)
+                deploy(webSocket, setSessionStarted)
               }}
             >
-              Déployer
+              Déployer une nouvelle carte
             </button>
             <button
               type="button"
@@ -90,7 +101,7 @@ function ClientInterface({
               type="button"
               className="btn btn-outline-danger btn-lg px-4"
               onClick={() => {
-                uninstall(webSocket)
+                uninstall(webSocket, setSessionStarted)
               }}
             >
               Désinstaller
@@ -99,7 +110,7 @@ function ClientInterface({
               type="button"
               className="btn btn-outline-dark btn-lg px-4"
               onClick={() => {
-                closeClientInterface(webSocket)
+                closeClientInterface(webSocket, setSessionStarted, setAuthenticated)
               }}
             >
               Fin

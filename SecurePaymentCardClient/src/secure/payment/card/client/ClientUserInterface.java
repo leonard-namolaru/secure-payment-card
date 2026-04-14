@@ -45,15 +45,17 @@ public abstract class ClientUserInterface implements UserInterface {
 		this.verbose = verbose;
 		
 		this.serverCommunicationChannel = new ServerCommunicationChannel(serverBaseUrl, this);
-
+		
 		this.javaCardClient = new JavaCardClient(host, port, this);
 		CardChannel cardChannel = javaCardClient.getCardChannel();
-		
+
 		sendMessageToUserIfDebug(String.format("ATR: [%s] \n", Util.convertByteArrayToString(javaCardClient.getATR())));
 		
 		this.sessionUserInterface = null;
 		this.applicationManagementService = null;
 		this.cardCommunicationChannel = new CardCommunicationChannel(cardChannel, this);
+		
+		
 		
 		AuthenticationRequest authenticationRequest = createServerAuthenticationRequestObject();
 		if (authenticationRequest == null) {
@@ -184,7 +186,7 @@ public abstract class ClientUserInterface implements UserInterface {
 
 		AMSession deployObject = createDeployObject(SecurePaymentCardClient.sAID_CAP, capFilePath, pin, securePayementCardID);
 		
-		sendMessageToUserIfDebug("Install");
+		sendMessageToUserIfVerbose("Démarrage de la procédure d'installation");
 		setCardCertificate(deployObject, pin, securePayementCardID);
 	}
 	
@@ -232,9 +234,21 @@ public abstract class ClientUserInterface implements UserInterface {
 		deployObject.close();
 		
 		List<ResponseAPDU> responses = deployObject.run(javaCardClient.getCardChannel());
+		
+		boolean installationOk = true;
 		for(int i = 0; i < responses.size(); i++) {
 			ResponseAPDU response = responses.get(i);
 			sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
+			
+			if (response.getSW() != CardCommunicationChannel.STATUS_OK) {
+				installationOk = false;
+			}
+		}
+		
+		if (installationOk) {
+			sendMessageToUserIfVerbose("Installation terminée avec succès.");
+		} else {
+			sendMessageToUser("L'installation a échoué.");
 		}
 	}
 
