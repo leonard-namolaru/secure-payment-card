@@ -32,15 +32,24 @@ import javacard.security.XECPrivateKey;
 import javacard.security.MessageDigest;
 import javacard.security.CryptoException;
 import javacard.security.NamedParameterSpec;
+import javacard.security.RSAPrivateKey;
 
 public class SecurePaymentCard extends Applet /* implements Personalization, Application */ {
     private byte[] storedData = new byte[256];
     private short storedLength = 0;
-
-	private short certificateOffset;
-    private byte[] certificateBuffer;
+    
+	private short outputOffset;
+	private short inputOffset;
+    private byte[] inputBuffer;
+    
+    RSAPrivateKey rsaPrivateKey;
+	private Certificate cardCertificate;
 	private Certificate clientCertificate;
-	private byte[] authenticationChallenge;
+	private short cardCertificateBytesLength;
+	private byte[] cardCertificateBytes;
+	private byte[] clientAuthenticationChallenge;
+	private short cardChallengeLength;
+	private byte[] cardAuthenticationChallenge;
 
 	private AESKey aesKey;
 	private Cipher aesCipherDecryptObject;
@@ -58,11 +67,19 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
     private final MonotonicCounter antiReplayAttacksCounter;
 
     private SecurePaymentCard(OwnerPIN ownerPin, MonotonicCounter antiReplayAttacksCounter, Signature cardSignature, Signature serverSignature, 
-    		Signature cardSignatureCheck, KeyPair cardKeyPair, XECPublicKey serverPublicKey, short initialBalance, byte[] securePayementCardID, Certificate certificate) { 
-    	this.certificateOffset = 0;
-    	this.clientCertificate = certificate;
-    	this.certificateBuffer = new byte[800];
-    	this.authenticationChallenge = new byte[100];
+    		Signature cardSignatureCheck, KeyPair cardKeyPair, XECPublicKey serverPublicKey, short initialBalance, byte[] securePayementCardID, 
+    		Certificate clientCertificate, Certificate cardCertificate, RSAPrivateKey rsaPrivateKey) { 
+    	this.cardChallengeLength = 0;
+    	this.cardCertificateBytesLength = 0;
+    	this.inputOffset = 0;
+    	this.outputOffset = 0;
+    	this.rsaPrivateKey = rsaPrivateKey;
+    	this.cardCertificate = cardCertificate;
+    	this.clientCertificate = clientCertificate;
+    	this.inputBuffer = new byte[800];
+    	this.clientAuthenticationChallenge = new byte[100];
+    	this.cardAuthenticationChallenge = new byte[300];
+    	this.cardCertificateBytes = new byte[800];
     	
     	this.aesKey = null;
     	this.ownerPin = ownerPin;
@@ -94,6 +111,8 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
         XECPublicKey clientPublicKey = (XECPublicKey) KeyBuilder.buildXECKey(namedParameterSpec, 
         		(short) (KeyBuilder.ATTR_PUBLIC | JCSystem.MEMORY_TYPE_TRANSIENT_RESET), false);
         
+        RSAPrivateKey rsaPrivateKey = (RSAPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PRIVATE, KeyBuilder.LENGTH_RSA_2048, false);  
+        
         Signature cardSignature = Signature.getInstance(MessageDigest.ALG_SHA_256, Signature.SIG_CIPHER_ECDSA_PLAIN, Cipher.PAD_NULL, false);
         Signature serverSignature = Signature.getInstance(MessageDigest.ALG_SHA_256, Signature.SIG_CIPHER_ECDSA_PLAIN, Cipher.PAD_NULL, false);
         Signature cardSignatureCheck = Signature.getInstance(MessageDigest.ALG_SHA_256, Signature.SIG_CIPHER_ECDSA_PLAIN, Cipher.PAD_NULL, false);
@@ -115,7 +134,7 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
         // GPSystem.getRegistryEntry(JCSystem.getAID()).setState(GPSystem.SECURITY_DOMAIN_PERSONALIZED);
         
         SecurePaymentCard securePaymentCard = new SecurePaymentCard(pin, counter, cardSignature, serverSignature, 
-    			cardSignatureCheck, keyPair, clientPublicKey, (short) 0, securePayementCardID, null);
+    			cardSignatureCheck, keyPair, clientPublicKey, (short) 0, securePayementCardID, null, null, rsaPrivateKey);
     	securePaymentCard.register();
     }
     
@@ -158,8 +177,10 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
     	if (pinTriesRemaining == 0) {
     		selectable = false;
     	}
-    	this.certificateOffset = 0;
-
+    	this.inputOffset = 0;
+    	this.outputOffset = 0;
+    	this.cardChallengeLength = 0;
+    	
     	this.genKeyPair();
     	signBalance();
         return selectable;
@@ -244,8 +265,14 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
             	case SecurePaymentCardConstants.INS_SEND_CLIENT_CERTIFICATE:
             		getClientCertificate(incomingApduCommand);
             		break; 
+            	case SecurePaymentCardConstants.INS_INSTALL_CARD_CERTIFICATE:
+            		installCardCertificate(incomingApduCommand);
+            		break; 
             	case SecurePaymentCardConstants.INS_CHALLENGE_RESPONSE:
-            		clientAuthentication(incomingApduCommand);
+            		authentication(incomingApduCommand);
+            		break;
+            	case SecurePaymentCardConstants.INS_GET_CHALLENGE:
+            		getChallenge(incomingApduCommand);
             		break;
             	default:
             		ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
@@ -261,7 +288,7 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
         }
      }
     
-    private void clientAuthentication(APDU apdu) {
+    private void authentication(APDU apdu) {
     	byte[] buffer = apdu.getBuffer();
         short byteRead = apdu.setIncomingAndReceive();
         
@@ -272,33 +299,99 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
         signatureBuffer[0] = buffer[ISO7816.OFFSET_P2];
         Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, signatureBuffer, (short) 1, byteRead);
         
-        if (!verifySignature(sig, authenticationChallenge, signatureBuffer)) {
+        if (!verifySignature(sig, clientAuthenticationChallenge, signatureBuffer)) {
         	ISOException.throwIt((short) 0x06);
         }
+        
+        sig = Signature.getInstance(MessageDigest.ALG_SHA, Signature.SIG_CIPHER_RSA, Cipher.PAD_PKCS1, false);
+        sig.init(rsaPrivateKey, Signature.MODE_SIGN);
+        
+    	// sign​(byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset) 
+        short offset = sig.sign(cardAuthenticationChallenge, (short) 0, cardChallengeLength, buffer, (short) 0);
+        apdu.setOutgoingAndSend((short) 0, offset);
+    }
+    
+    private void getChallenge(APDU apdu) {
+    	byte[] buffer = apdu.getBuffer();
+        short byteRead = apdu.setIncomingAndReceive();
+        
+        // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, cardAuthenticationChallenge, (short) 0, byteRead);
+        cardChallengeLength = byteRead;
+        
+        RandomData.OneShot rng = RandomData.OneShot.open(RandomData.ALG_TRNG);
+        rng.nextBytes(clientAuthenticationChallenge, (short) 0, (short) clientAuthenticationChallenge.length);
+        
+        // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+        Util.arrayCopy(clientAuthenticationChallenge, (short) 0, buffer, (short) 0, (short) clientAuthenticationChallenge.length);
+        apdu.setOutgoingAndSend((short) 0, (short) clientAuthenticationChallenge.length);
     }
     
     private void getClientCertificate(APDU apdu) {
+		short commandDataMaxSize = 120;
+
     	byte[] buffer = apdu.getBuffer();
         short byteRead = apdu.setIncomingAndReceive();
         boolean isLastMessage = buffer[ISO7816.OFFSET_P1] == 0x01;
 
         // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
-        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, certificateBuffer, this.certificateOffset, byteRead);
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, inputBuffer, this.inputOffset, byteRead);
         
+        // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+		short start = outputOffset;
+		short end = (short) ((outputOffset + commandDataMaxSize) >= cardCertificateBytesLength ? cardCertificateBytesLength : (outputOffset + commandDataMaxSize));
+		
+        Util.arrayCopy(cardCertificateBytes, start, buffer, (short) 0, (short) (end - start));
+        apdu.setOutgoingAndSend((short) 0, (short) (short) (end - start));
+        
+		boolean isLastResponse= ((outputOffset + commandDataMaxSize) >= cardCertificateBytesLength);
+		if (isLastResponse) {
+			this.outputOffset = 0;
+		} else {
+			this.outputOffset += commandDataMaxSize;
+		}
+		
+		
         if (isLastMessage) {
             Cert cert = new Cert();
-            this.clientCertificate = cert.buildCert(certificateBuffer, (short) 0, (short) (this.certificateOffset + byteRead));
-            
-            RandomData.OneShot rng = RandomData.OneShot.open(RandomData.ALG_TRNG);
-            rng.nextBytes(authenticationChallenge, (short) 0, (short) authenticationChallenge.length);
-            
-            // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
-            Util.arrayCopy(authenticationChallenge, (short) 0, buffer, (short) 0, (short) authenticationChallenge.length);
-            apdu.setOutgoingAndSend((short) 0, (short) authenticationChallenge.length);
+            this.clientCertificate = cert.buildCert(inputBuffer, (short) 0, (short) (this.inputOffset + byteRead));
+            this.inputOffset = 0;
+       } else {
+           this.inputOffset += commandDataMaxSize;
        }
-        
-        this.certificateOffset += 120;
     }
+    
+    private void installCardCertificate(APDU apdu) {
+    	byte[] buffer = apdu.getBuffer();
+        short byteRead = apdu.setIncomingAndReceive();
+        boolean isLastMessage = buffer[ISO7816.OFFSET_P1] == 0x01;
+
+        // arrayCopy​(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, inputBuffer, this.inputOffset, byteRead);
+        
+        if (isLastMessage) {
+            byte messageType = buffer[ISO7816.OFFSET_P2];
+            switch (messageType) {
+            case 0x00:
+                Cert cert = new Cert();
+                this.cardCertificate = cert.buildCert(inputBuffer, (short) 0, (short) (this.inputOffset + byteRead));
+                Util.arrayCopy(inputBuffer, (short) 0, cardCertificateBytes,  (short) 0, (short) (this.inputOffset + byteRead));
+                this.cardCertificateBytesLength =  (short) (this.inputOffset + byteRead);
+                break;
+            case 0x01:
+            	this.rsaPrivateKey.setExponent(inputBuffer, (short) 0,  (short) (this.inputOffset + byteRead)) ;  
+                break;
+            case 0x02:
+            	this.rsaPrivateKey.setModulus(inputBuffer, (short) 0,  (short) (this.inputOffset + byteRead)) ;  
+                break;
+            }
+
+            this.inputOffset = 0;            
+       }  else {
+           this.inputOffset += 120;
+       }
+    }
+
     
     private void keyAgreement(APDU apdu) { 
         NamedParameterSpec namedParameterSpec = NamedParameterSpec.getInstance(NamedParameterSpec.SECP256R1); // secp256r1 curve

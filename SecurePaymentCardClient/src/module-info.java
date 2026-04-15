@@ -15,4 +15,5 @@ module SecurePaymentCardClient {
 	requires com.google.gson;
 	requires org.bouncycastle.pkix;
 	requires org.java_websocket;
+	requires gpapi.globalplatform;
 }

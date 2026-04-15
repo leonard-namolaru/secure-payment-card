@@ -27,11 +27,15 @@ import java.security.InvalidKeyException;
 import java.security.spec.ECPublicKeySpec;
 import java.security.spec.ECParameterSpec;
 import java.security.interfaces.ECPublicKey;
+import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
 import java.security.interfaces.ECPrivateKey;
 import java.security.spec.ECGenParameterSpec;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.InvalidParameterSpecException;
+import java.security.spec.RSAPrivateCrtKeySpec;
 import java.security.InvalidAlgorithmParameterException;
 
 import org.bouncycastle.jce.ECPointUtil;
@@ -69,8 +73,8 @@ public final class Crypto {
 		
 		try {
 			// void java.lang.System.arraycopy( Object src, int srcPos, Object dest, int destPos, int length)
-			System.arraycopy(xBytes, xBytes[0] == 0x00 ? 1 : 0, byteArray, 1, 32);
-			System.arraycopy(yBytes, yBytes[0] == 0x00 ? 1 : 0, byteArray, 33, 32);
+			System.arraycopy(xBytes, xBytes[0] == 0x00 ? 1 : 0, byteArray, 1, xBytes.length < 32 ? xBytes.length : 32);
+			System.arraycopy(yBytes, yBytes[0] == 0x00 ? 1 : 0, byteArray, 33, yBytes.length < 32 ? yBytes.length : 32);
 			System.out.println(Util.bytesToHex(xBytes));
 			System.out.println(Util.bytesToHex(yBytes));
 			System.out.println(Util.bytesToHex(byteArray));

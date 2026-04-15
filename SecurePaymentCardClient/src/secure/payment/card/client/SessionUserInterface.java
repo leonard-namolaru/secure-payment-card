@@ -7,11 +7,15 @@ import java.security.Key;
 import java.security.KeyPair;
 import java.security.Signature;
 import java.security.SignatureException;
+import java.io.ByteArrayInputStream;
 import java.security.InvalidKeyException;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.ECPrivateKey;
 import java.security.NoSuchProviderException;
+import java.security.SecureRandom;
 import java.security.NoSuchAlgorithmException;
 
 import secure.payment.card.client.JsonPayload.OperationResult;
@@ -22,7 +26,10 @@ public abstract class SessionUserInterface implements UserInterface {
 	private Key aesKey;
 	private Cipher aesCipherDecryptObject;
 	private Cipher aesCipherEncryptObject;
-
+	
+	KeyPair rsaKeyPair;
+	X509Certificate cardCertificate;
+	
 	protected boolean debug;
 	protected boolean verbose;
 
@@ -58,11 +65,21 @@ public abstract class SessionUserInterface implements UserInterface {
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
-		sendMessageToUserIfVerbose("Authentification du client");
-		if (clientAuthentication()) {
-			sendMessageToUser("L'authentification du client a réussi.");
+		sendMessageToUserIfVerbose("Echange de certificats");
+		this.rsaKeyPair = Crypto.generateRsaKeyPair();
+		this.cardCertificate = sendAndGetCertificate();
+		if (this.cardCertificate != null) {
+			sendMessageToUser("L'échange de certificats a été effectué avec succès.");
 		} else {
-			sendMessageToUser("L'authentification du client a échoué.");
+			sendMessageToUser("L'échange de certificats a échoué.");
+			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+		}
+		
+		sendMessageToUserIfVerbose("Authentification du client et de la carte");
+		if (sendAndGetchallenge()) {
+			sendMessageToUser("L'authentification a réussi.");
+		} else {
+			sendMessageToUser("L'authentification a échoué.");
 			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
 		}
 		
@@ -138,24 +155,55 @@ public abstract class SessionUserInterface implements UserInterface {
 		sendMessageToUser("La session a démarré");
 	}
 	
-	private boolean clientAuthentication() {
+	private X509Certificate sendAndGetCertificate() {		
+		X509Certificate clientCertificate = Crypto.createSelfSignedCertificate(this.rsaKeyPair);		
+		ResponseAPDU response = cardCommunicationChannel.sendCertificate(SecurePaymentCardConstants.INS_SEND_CLIENT_CERTIFICATE, clientCertificate);
+		sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
+		if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
+			ByteArrayInputStream inputStream = new ByteArrayInputStream(response.getData());
+			
+			CertificateFactory certFactory = null;
+			try {
+				certFactory = CertificateFactory.getInstance("X.509");
+			} catch (CertificateException e) {
+				return null;
+			}
+			try {
+				return (X509Certificate) certFactory.generateCertificate(inputStream);
+			} catch (CertificateException e) {
+				return null;
+			}
+		} 
+		
+		return null;
+	}
+	
+	private boolean sendAndGetchallenge() {
 		boolean authenticationResult = true;
 		
-		KeyPair keyPair = Crypto.generateRsaKeyPair();
-		X509Certificate certificate = Crypto.createSelfSignedCertificate(keyPair);		
-		ResponseAPDU response = cardCommunicationChannel.sendClientCertificate(certificate);
+	      SecureRandom random = new SecureRandom();
+	      byte cardChallenge[] = new byte[50];
+	      random.nextBytes(cardChallenge);
+
+		ResponseAPDU response = cardCommunicationChannel.sendAndGetChallenge(cardChallenge);
 		if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
 			byte[] challenge = response.getData();
-			
+
 			try {
 				Signature signatureObject = Signature.getInstance("SHA1withRSA", "BC");
-				signatureObject.initSign(keyPair.getPrivate());
+				signatureObject.initSign(rsaKeyPair.getPrivate());
 				signatureObject.update(challenge);
 				
 				byte[] signature = signatureObject.sign();
 				response = cardCommunicationChannel.sendChallengeResponse(signature);
 				if (response.getSW() != CardCommunicationChannel.STATUS_OK) {
 					authenticationResult = false;
+				} else {
+					signatureObject = Signature.getInstance("SHA1withRSA", "BC");
+					signatureObject.initVerify(cardCertificate);
+					signatureObject.update(cardChallenge);
+					
+					return signatureObject.verify(response.getData());
 				}
 			} catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidKeyException | SignatureException e) {
 				sendMessageToUserIfDebug(String.format("%s : %s", e.getClass().toString(), e.getMessage()));
@@ -166,6 +214,7 @@ public abstract class SessionUserInterface implements UserInterface {
 		}
 		
 		return authenticationResult;
+
 	}
 	
 	

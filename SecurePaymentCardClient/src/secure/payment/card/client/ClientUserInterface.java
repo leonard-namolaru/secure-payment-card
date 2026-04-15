@@ -1,20 +1,24 @@
 package secure.payment.card.client;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import javax.smartcardio.CardChannel;
+import javax.smartcardio.CardException;
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 
 import java.security.Security;
 import java.security.KeyPair;
 import java.security.Signature;
+import java.security.cert.X509Certificate;
 import java.security.NoSuchProviderException;
 import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
@@ -23,6 +27,7 @@ import java.security.interfaces.RSAPrivateKey;
 import com.oracle.javacard.ams.AMSession;
 import com.oracle.javacard.ams.AMService;
 import com.oracle.javacard.ams.config.CAPFile;
+import com.oracle.javacard.ams.config.GPApplicationPrivilege;
 import com.oracle.javacard.ams.AMServiceFactory;
 
 import secure.payment.card.client.JsonPayload.AuthenticationRequest;
@@ -192,11 +197,13 @@ public abstract class ClientUserInterface implements UserInterface {
 			String propertiesFilePath = getPropertiesFilePath();
 			applicationManagementService = initApplicationManagementService(propertiesFilePath);
 		}
+		
 		KeyPair keyPair = Crypto.generateRsaKeyPair();
 		RSAPrivateKey rsaPrivateKey = (RSAPrivateKey) keyPair.getPrivate();
+		
 		byte[] modulus = rsaPrivateKey.getModulus().toByteArray();
 		byte[] privateExponent = rsaPrivateKey.getPrivateExponent().toByteArray();
-
+			
 		// byte[] data = Util.concatArrays(new byte[] {(byte) 0xA2}, rsaPrivateKey.getEncoded());
 		// ArrayList<CommandAPDU> commands = cardCommunicationChannel.splitPayload((byte) 0x0C, (byte) 0xE2, rsaPrivateKey.getEncoded());
 		// byte[] payload = Util.concatArrays(new byte[] {0x00, 0x00, (byte) "1b45afcde9".getBytes().length}, "1b45afcde9".getBytes());
@@ -206,25 +213,56 @@ public abstract class ClientUserInterface implements UserInterface {
 		//	deployObject.append(command);
 		//}
 		
-		/*
-		CommandAPDU installForPersonalization = new CommandAPDU( 0x80, 0xE2, 0b10000001, 0x00, new byte[] {});
-		deployObject.append(installForPersonalization);
-		byte[] nestedCommand = new byte[] {(byte) 0xDB, 0x7F, 0x21, 0x00, };
-		deployObject.append(installForPersonalization);
-		sendMessageToUserIfDebug(Util.convertApduCommandToLogString(installForPersonalization));
-		*/
+		// CommandAPDU installForPersonalization = new CommandAPDU( 0x80, 0xE2, 0b10000001, 0x00, new byte[] {});
+		// deployObject.append(installForPersonalization);
+		// byte[] nestedCommand = new byte[] {(byte) 0xDB, 0x7F, 0x21, 0x00, };
+		// deployObject.append(installForPersonalization);
+		// sendMessageToUserIfDebug(Util.convertApduCommandToLogString(installForPersonalization));
 		
-		byte[] installForPersonalizationPayload = Util.concatArrays(new byte[] {0x00, 0x00, (byte) "1b45afcde9".getBytes().length}, 
-				"1b45afcde9".getBytes());
-		CommandAPDU installForPersonalization = new CommandAPDU(0x80, 0xE6, 0x20, 0x00, 
-				Util.concatArrays(installForPersonalizationPayload, new byte[] {0x00, 0x00, 0x00}));
-		CommandAPDU storeDataTest = new CommandAPDU(0x80, 0xE2, 0x80, 0x00, new byte[] {0x01, 0x02, 0x03, 0x04, 0x05});
+		// byte[] installForPersonalizationPayload = Util.concatArrays(new byte[] {0x00, 0x00, (byte) SecurePaymentCardClient.sAID_AppletInstance.getBytes().length}, 
+		//		SecurePaymentCardClient.sAID_AppletInstance.getBytes());
+		// CommandAPDU installForPersonalization = new CommandAPDU(0x80, 0xE6, 0b10100000, 0x00, 
+		// Util.concatArrays(installForPersonalizationPayload, new byte[] {0x00, 0x00, 0x00}));
+		// CommandAPDU storeDataTest = new CommandAPDU(0x80, 0xE2, 0x80, 0x00, new byte[] {0x01, 0x02, 0x03, 0x04, 0x05});
 
 		// deployObject.append(installForPersonalization);
 		// deployObject.append(storeDataTest);
 		// sendMessageToUserIfDebug(Util.convertApduCommandToLogString(installForPersonalization));
 		// sendMessageToUserIfDebug(Util.convertApduCommandToLogString(storeDataTest));
+		
+		// byte[] installToken = new byte[0];
+		// GPApplicationPrivilege privilege = GPApplicationPrivilege.DEFAULT_SELECTED;
+		// byte[] privileges = new byte[] {(byte)	privilege.getEncoding() };
+		
+		// try {
+		//	ByteArrayOutputStream installCommandData = new ByteArrayOutputStream();
+		//	installCommandData.write("secure.payment.card".length());
+		//	installCommandData.write("secure.payment.card".getBytes());
 
+		//	installCommandData.write("1b45afcde912646c".length());
+		//	installCommandData.write("1b45afcde912646c".getBytes());
+
+		//	installCommandData.write("1b45afcde912646c".length());
+		//	installCommandData.write("1b45afcde912646c".getBytes());
+
+		//	installCommandData.write(privileges.length);
+		//	installCommandData.write(privileges);
+		//	installCommandData.write(installationParameters.length);
+		//	installCommandData.write(installationParameters);
+
+		//	installCommandData.write(installToken.length);
+		//	installCommandData.write(installToken);
+			
+		//	CommandAPDU installForInstallAndMakeSelectable = new CommandAPDU(0x80, 0xE6, 0x0C, 0x00, new byte[] {0x01, 0x02, 0x03, 0x04, 0x05});
+		//  deployObject.append(installForInstallAndMakeSelectable);
+
+			
+			//deployObject.append(installForPersonalization);
+		// } catch (IOException e) {
+		//	System.out.println(e.getMessage());
+		// }
+		
+		
 		byte[] installationParameters = Util.concatArrays(securePayementCardID.getBytes(), pin);
 		deployObject.install(SecurePaymentCardClient.sAID_CAP, SecurePaymentCardClient.sAID_AppletClass, 
 				SecurePaymentCardClient.sAID_AppletInstance, installationParameters); 
@@ -244,6 +282,26 @@ public abstract class ClientUserInterface implements UserInterface {
 		
 		if (installationOk) {
 			sendMessageToUserIfVerbose("Installation terminée avec succès.");
+			
+			cardCommunicationChannel.selectApplet();
+			X509Certificate certificate = Crypto.createSelfSignedCertificate(keyPair);		
+			ResponseAPDU response = cardCommunicationChannel.sendCertificate(SecurePaymentCardConstants.INS_INSTALL_CARD_CERTIFICATE, certificate);
+			if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
+				ArrayList<CommandAPDU> commands = cardCommunicationChannel.splitPayload(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
+						SecurePaymentCardConstants.INS_INSTALL_CARD_CERTIFICATE, privateExponent, (byte) 0x01);
+				response = cardCommunicationChannel.sendCommands(commands);
+				if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
+					if (modulus[0] == 0x00) {
+						byte[] buffer = new byte[modulus.length - 1];
+						System.arraycopy(modulus, 1, buffer, 0, buffer.length);
+						modulus = buffer;
+					}
+					
+					commands = cardCommunicationChannel.splitPayload(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
+							SecurePaymentCardConstants.INS_INSTALL_CARD_CERTIFICATE, modulus, (byte) 0x02);
+					response = cardCommunicationChannel.sendCommands(commands);
+				}
+			} 
 		} else {
 			sendMessageToUser("L'installation a échoué.");
 		}

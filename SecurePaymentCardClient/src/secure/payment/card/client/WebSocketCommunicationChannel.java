@@ -10,8 +10,8 @@ import org.java_websocket.WebSocket;
 import org.java_websocket.server.WebSocketServer;
 import org.java_websocket.handshake.ClientHandshake;
 
-import secure.payment.card.client.JsonPayload.Transaction;
 import secure.payment.card.client.JsonPayload.UserPin;
+import secure.payment.card.client.JsonPayload.Transaction;
 import secure.payment.card.client.JsonPayload.AuthenticationRequest;
 
 public class WebSocketCommunicationChannel extends WebSocketServer {

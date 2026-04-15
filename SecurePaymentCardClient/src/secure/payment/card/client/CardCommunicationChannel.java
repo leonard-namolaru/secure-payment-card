@@ -95,6 +95,22 @@ public class CardCommunicationChannel {
 		}
 	}
 	
+	
+	public ResponseAPDU sendAndGetChallenge(byte challenge[]) {
+		CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
+				SecurePaymentCardConstants.INS_GET_CHALLENGE, 0x00, 0x00, 
+				challenge);
+		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
+		
+		try {
+			ResponseAPDU response = cardChannel.transmit(command);
+			userInterface.sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
+			return response;
+		} catch (CardException e) {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
+	}
+	
 	public ResponseAPDU sendChallengeResponse(byte challengeResponse[]) {
 		if (challengeResponse.length <= 255) {
 			CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
@@ -271,11 +287,11 @@ public class CardCommunicationChannel {
 		}
 	}
 	
-	public ResponseAPDU sendClientCertificate(X509Certificate certificate) {		
+	public ResponseAPDU sendCertificate(byte commandINS, X509Certificate certificate) {		
 		try {
 			byte[] certificateBytes = certificate.getEncoded();
 			ArrayList<CommandAPDU> commands = splitPayload(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
-					SecurePaymentCardConstants.INS_SEND_CLIENT_CERTIFICATE, certificateBytes);
+					commandINS, certificateBytes, (byte) 0x00);
 			return sendCommands(commands);
 		} catch (CertificateEncodingException e) {
 			userInterface.sendMessageToUserIfDebug(String.format("%s : %s", e.getClass().toString(), e.getMessage()));
@@ -296,11 +312,11 @@ public class CardCommunicationChannel {
 		}
 	}
 	
-	public ArrayList<CommandAPDU> splitPayload(byte commandCLA, byte commandINS, byte[] payload) {		
+	public ArrayList<CommandAPDU> splitPayload(byte commandCLA, byte commandINS, byte[] payload, byte p2) {		
 		ArrayList<CommandAPDU> commands = new ArrayList<CommandAPDU>();
 		int commandDataMaxSize = 120;
 			
-		for(int i = 0, j = 0; i < payload.length; i += commandDataMaxSize, j++) {
+		for(int i = 0; i < payload.length; i += commandDataMaxSize) {
 			int start = i;
 			int end = (i + commandDataMaxSize) >= payload.length ? payload.length : (i + commandDataMaxSize);
 			int isLastPayload = (i + commandDataMaxSize) >= payload.length ? 0x01 : 0x00;
@@ -308,13 +324,7 @@ public class CardCommunicationChannel {
 			byte[] buffer = new byte[end - start];
 			System.arraycopy(payload, start, buffer, 0, end - start);
 			
-			byte p1 = 0x00;
-			if (isLastPayload == 0x01) {
-				p1 = (byte) 0x01;
-			}
-
-			CommandAPDU command = new CommandAPDU(commandCLA, commandINS, p1, (byte) j, buffer, 
-					MAX_EXPECTED_BYTES_IN_RESPONSE);
+			CommandAPDU command = new CommandAPDU(commandCLA, commandINS, (byte) isLastPayload, p2, buffer);
 			commands.add(command);	
 		}	
 		
@@ -322,14 +332,32 @@ public class CardCommunicationChannel {
 	}
 	
 	public ResponseAPDU sendCommands(ArrayList<CommandAPDU> commands) {
+		byte[] responseBuffer = new byte[800];
+		int responseDataOffset = 0;
+		
 		try {
 			for(CommandAPDU command : commands) {
 				userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
 				
 				ResponseAPDU response = cardChannel.transmit(command);
 				userInterface.sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
-				if (response.getSW() != STATUS_OK || command.getP1() == 0x01) {
+				if (response.getSW() != STATUS_OK) {
 					return response;
+				} 
+				
+				byte[] data = response.getData();
+				if ((data.length + responseDataOffset) < responseBuffer.length) {
+					System.arraycopy(data, 0, responseBuffer, responseDataOffset, data.length);
+					responseDataOffset += data.length;
+				}
+				
+				if (command.getP1() == 0x01) {
+					byte[] responseBytes = new byte[responseDataOffset + 2];
+					System.arraycopy(responseBuffer, 0, responseBytes, 0, responseDataOffset);
+					
+					byte[] sw = new byte[] {(byte) 0x90, 0x00};
+					System.arraycopy(sw, 0, responseBytes, responseDataOffset, sw.length);
+					return new ResponseAPDU(responseBytes);
 				}
 			}
 		} catch (CardException e) {
