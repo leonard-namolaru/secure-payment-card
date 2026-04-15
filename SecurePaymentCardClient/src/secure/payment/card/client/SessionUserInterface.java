@@ -1,6 +1,7 @@
 package secure.payment.card.client;
 
 import javax.crypto.Cipher;
+import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 
 import java.security.Key;
@@ -13,6 +14,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
+import java.util.ArrayList;
 import java.security.interfaces.ECPrivateKey;
 import java.security.NoSuchProviderException;
 import java.security.SecureRandom;
@@ -28,6 +30,8 @@ public abstract class SessionUserInterface implements UserInterface {
 	private Cipher aesCipherEncryptObject;
 	
 	KeyPair rsaKeyPair;
+	Signature rsaSignatureSign;
+	Signature rsaSignatureVerify;
 	X509Certificate cardCertificate;
 	
 	protected boolean debug;
@@ -157,7 +161,7 @@ public abstract class SessionUserInterface implements UserInterface {
 	
 	private X509Certificate sendAndGetCertificate() {		
 		X509Certificate clientCertificate = Crypto.createSelfSignedCertificate(this.rsaKeyPair);		
-		ResponseAPDU response = cardCommunicationChannel.sendCertificate(SecurePaymentCardConstants.INS_SEND_CLIENT_CERTIFICATE, clientCertificate);
+		ResponseAPDU response = cardCommunicationChannel.sendCertificate(SecurePaymentCardConstants.INS_SEND_CERTIFICATE, clientCertificate);
 		sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
 		if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
 			ByteArrayInputStream inputStream = new ByteArrayInputStream(response.getData());
@@ -190,20 +194,20 @@ public abstract class SessionUserInterface implements UserInterface {
 			byte[] challenge = response.getData();
 
 			try {
-				Signature signatureObject = Signature.getInstance("SHA1withRSA", "BC");
-				signatureObject.initSign(rsaKeyPair.getPrivate());
-				signatureObject.update(challenge);
-				
-				byte[] signature = signatureObject.sign();
+				rsaSignatureSign = Signature.getInstance("SHA1withRSA", "BC");
+				rsaSignatureSign.initSign(rsaKeyPair.getPrivate());
+				rsaSignatureSign.update(challenge);
+
+				byte[] signature = rsaSignatureSign.sign();
 				response = cardCommunicationChannel.sendChallengeResponse(signature);
 				if (response.getSW() != CardCommunicationChannel.STATUS_OK) {
 					authenticationResult = false;
 				} else {
-					signatureObject = Signature.getInstance("SHA1withRSA", "BC");
-					signatureObject.initVerify(cardCertificate);
-					signatureObject.update(cardChallenge);
+					rsaSignatureVerify = Signature.getInstance("SHA1withRSA", "BC");
+					rsaSignatureVerify.initVerify(cardCertificate);
+					rsaSignatureVerify.update(cardChallenge);
 					
-					return signatureObject.verify(response.getData());
+					return rsaSignatureVerify.verify(response.getData());
 				}
 			} catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidKeyException | SignatureException e) {
 				sendMessageToUserIfDebug(String.format("%s : %s", e.getClass().toString(), e.getMessage()));
@@ -217,13 +221,52 @@ public abstract class SessionUserInterface implements UserInterface {
 
 	}
 	
-	
 	private Key generateSharedKey() {
-		KeyPair keyPair = Crypto.generateKeyPair();
-		ResponseAPDU response = cardCommunicationChannel.keyAgreement((ECPublicKey) keyPair.getPublic());
+		antiReplayAttacksCounter++;
 		
+		KeyPair keyPair = Crypto.generateKeyPair();
+		byte[] encodedPublicKey = Crypto.getByteArrayFromPublicKey((ECPublicKey) keyPair.getPublic());	
+				
+		byte[] encodedPublicKeyWithCounter = new byte[encodedPublicKey.length + 1];
+		System.arraycopy(encodedPublicKey, 0, encodedPublicKeyWithCounter, 0, encodedPublicKey.length);
+		encodedPublicKeyWithCounter[encodedPublicKey.length] = antiReplayAttacksCounter;
+		
+		byte[] signature = null;
+		try {
+			rsaSignatureSign.update(encodedPublicKeyWithCounter);
+			signature = rsaSignatureSign.sign();
+		} catch (SignatureException e) {
+			System.out.println("1 " + e.getMessage());
+			return null;
+		}
+		
+		byte[] payload = Util.concatArrays(encodedPublicKeyWithCounter, signature);
+		ArrayList<CommandAPDU> commands = cardCommunicationChannel.splitPayload(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
+				SecurePaymentCardConstants.INS_CLIENT_CARD_KEY_AGREEMENT, payload, (byte) 0x00);
+		ResponseAPDU response = cardCommunicationChannel.sendCommands(commands);
+		sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
 		if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
-			byte[] cardPublicKeyByteArray = response.getData();
+			int cardCounter = Util.bytesToInt(response.getData(), 65, SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE);
+			
+			byte[] message = new byte[65 + SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE];
+			System.arraycopy(response.getData(), 0, message, 0, message.length);
+			
+			byte[] messageSignature = new byte[response.getData().length - (65 + SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE)];
+			System.arraycopy(response.getData(), 65 + SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE, messageSignature, 0, messageSignature.length);
+
+			try {
+				rsaSignatureVerify.initVerify(cardCertificate);
+				rsaSignatureVerify.update(message);
+				if (!rsaSignatureVerify.verify(messageSignature)) {
+					System.out.println("2 ");
+					return null;
+				}
+			} catch (SignatureException | InvalidKeyException e) {
+				System.out.println("3 " + e.getMessage());
+			}
+			
+			byte[] cardPublicKeyByteArray = new byte[65];
+			System.arraycopy(response.getData(), 0, cardPublicKeyByteArray, 0, 65);
 			ECPublicKey cardPublicKey = Crypto.getPublicKeyFromByteArray(cardPublicKeyByteArray);		
 			
 			byte[] sharedSecret = Crypto.generateSharedSecret(cardPublicKey, keyPair.getPrivate());
