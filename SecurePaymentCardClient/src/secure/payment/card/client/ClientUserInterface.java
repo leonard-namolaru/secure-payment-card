@@ -143,20 +143,27 @@ public abstract class ClientUserInterface implements UserInterface {
 	
 	private String registerNewSecurePayementCard()  {
 		String securePayementCardID = null;
+		Signature signatureObject = null;
+		byte[] publicKey = null;
 		
-		KeyPair keyPair = Crypto.generateKeyPair();
-		Signature signatureObject = Crypto.setSignatureAlgorithm();
-		if (signatureObject == null) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
-		}
+		int i = 0;
+		while (publicKey == null && i < 5) {
+			KeyPair keyPair = Crypto.generateKeyPair();
+			signatureObject = Crypto.setSignatureAlgorithm();
+			if (signatureObject == null) {
+				sendMessageToUser("Une erreur inattendue s'est produite.");
+				System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			}
 
-		if(!Crypto.signatureInitSign(signatureObject, (ECPrivateKey) keyPair.getPrivate())) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			if(!Crypto.signatureInitSign(signatureObject, (ECPrivateKey) keyPair.getPrivate())) {
+				sendMessageToUser("Une erreur inattendue s'est produite.");
+				System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			}
+			
+			publicKey = Crypto.getByteArrayFromPublicKey((ECPublicKey) keyPair.getPublic(), this);
+			i++;
 		}
 		
-		byte[] publicKey = Crypto.getByteArrayFromPublicKey((ECPublicKey) keyPair.getPublic());
 		byte[] signature = Crypto.signMessage(signatureObject, new byte[] {0x00, 0x00});
 		HttpResponseBodyUnionType<SecurePaymentCardCreationResponse> httpResponse = 
 				serverCommunicationChannel.sendSecurePaymentCardRecord(publicKey, signature);
@@ -281,7 +288,6 @@ public abstract class ClientUserInterface implements UserInterface {
 		}
 		
 		if (installationOk) {
-			sendMessageToUserIfVerbose("Installation terminée avec succès.");
 			
 			cardCommunicationChannel.selectApplet();
 			X509Certificate certificate = Crypto.createSelfSignedCertificate(keyPair);		
@@ -300,18 +306,32 @@ public abstract class ClientUserInterface implements UserInterface {
 					commands = cardCommunicationChannel.splitPayload(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
 							SecurePaymentCardConstants.INS_INSTALL_CARD_CERTIFICATE, modulus, (byte) 0x02);
 					response = cardCommunicationChannel.sendCommands(commands);
+					if (response.getSW() == CardCommunicationChannel.STATUS_OK) {
+						sendMessageToUserIfVerbose("Installation terminée avec succès.");
+					} else {
+						sendMessageToUser("L'installation a échoué.");
+					}
+				} else {
+					sendMessageToUser("L'installation a échoué.");
 				}
-			} 
+			}  else {
+				sendMessageToUser("L'installation a échoué.");
+			}
 		} else {
 			sendMessageToUser("L'installation a échoué.");
 		}
 	}
 	
 	protected void startOrResumeSession() {
-		if (sessionUserInterface == null) {
-			startSession();
+		try {
+			if (sessionUserInterface == null) {
+				startSession();
+			}
+			sessionUserInterface.run();
+		} catch (Exception e) {
+			sessionUserInterface = null;
+			sendMessageToUserIfDebug("Échec du démarrage de la session");
 		}
-		sessionUserInterface.run();
 	}
 	
 	protected void uninstall() {
@@ -320,9 +340,13 @@ public abstract class ClientUserInterface implements UserInterface {
 			applicationManagementService = initApplicationManagementService(propertiesFilePath);
 		}
 		
-		sendMessageToUserIfDebug("Uninstall");
-		sendMessageToUserIfDebug("Unload");
-		cardCommunicationChannel.undeploy(applicationManagementService);
+		sendMessageToUserIfVerbose("Démarrage de la procédure de désinstallation");
+		boolean operationResult = cardCommunicationChannel.undeploy(applicationManagementService);
+		if (operationResult) {
+			sendMessageToUserIfVerbose("La procédure de désinstallation a réussi.");
+		} else {
+			sendMessageToUser("La procédure de désinstallation a échoué.");
+		}
 		sessionUserInterface = null;
 	}
 	

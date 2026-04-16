@@ -38,7 +38,6 @@ function Authentication({
           <h1 className="display-4 fw-bold lh-1 text-body-emphasis mb-3">
             Interface de gestion des cartes de paiement
           </h1>
-          <p className="col-lg-10 fs-4">...</p>
         </div>
         <div className="col-md-10 mx-auto col-lg-5">
           <div className="p-4 p-md-5 border rounded-3 bg-body-tertiary">
@@ -76,7 +75,9 @@ function Authentication({
               &nbsp;Se connecter
             </button>
             <hr className="my-4" />
-            <small className="text-body-secondary">...</small>
+            <small className="text-body-secondary">
+              L'authentification est nécessaire pour pouvoir échanger avec le serveur.
+            </small>
           </div>
         </div>
       </div>

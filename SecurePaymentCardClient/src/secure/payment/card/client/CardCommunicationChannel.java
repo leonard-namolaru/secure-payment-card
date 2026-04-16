@@ -44,8 +44,11 @@ public class CardCommunicationChannel {
 	}
 	
 	public ResponseAPDU keyAgreement(ECPublicKey clientPublicKey) {
-		byte[] encodedPublicKey = Crypto.getByteArrayFromPublicKey(clientPublicKey);
-
+		byte[] encodedPublicKey = Crypto.getByteArrayFromPublicKey(clientPublicKey, userInterface);
+		if (encodedPublicKey == null) {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
+		
 		CommandAPDU command = new CommandAPDU(SecurePaymentCardConstants.CLA_SECURE_PAYMENT_CARD, 
 				SecurePaymentCardConstants.INS_CLIENT_CARD_KEY_AGREEMENT, 0x00, 0x00, encodedPublicKey, MAX_EXPECTED_BYTES_IN_RESPONSE);
 		userInterface.sendMessageToUserIfDebug(Util.convertApduCommandToLogString(command));
@@ -231,7 +234,10 @@ public class CardCommunicationChannel {
 	}
 
 	public ResponseAPDU putPublicKey(ECPublicKey clientPublicKey, byte antiReplayAttacksCounter, Cipher aesCipherEncryptObject) {
-		byte[] encodedPublicKey = Crypto.getByteArrayFromPublicKey(clientPublicKey);
+		byte[] encodedPublicKey = Crypto.getByteArrayFromPublicKey(clientPublicKey, userInterface);
+		if (encodedPublicKey == null) {
+			return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
+		}
 		
 		byte[] data = new byte[encodedPublicKey.length + 1];
 		System.arraycopy(encodedPublicKey, 0, data, 0, encodedPublicKey.length);
@@ -299,17 +305,25 @@ public class CardCommunicationChannel {
 		return new ResponseAPDU(new byte[] {0x00, 0x00, 0x00, 0x00});
 	}
 	
-	public void undeploy(AMService applicationManagementService) {
+	public boolean undeploy(AMService applicationManagementService) {
 		AMSession undeploy = applicationManagementService.openSession(SecurePaymentCardClient.isdAID); 
 		undeploy.uninstall(SecurePaymentCardClient.sAID_AppletInstance);
 		undeploy.unload(SecurePaymentCardClient.sAID_CAP); 
 		undeploy.close();
 		
 		List<ResponseAPDU> responses = undeploy.run(cardChannel);
+		
+		boolean undeployOk = true;
 		for(int i = 0; i < responses.size(); i++) {
 			ResponseAPDU response = responses.get(i);
 			userInterface.sendMessageToUserIfDebug(Util.convertApduResponseToLogString(response));
+			
+			if (response.getSW() != CardCommunicationChannel.STATUS_OK) {
+				undeployOk = false;
+			}
 		}
+		
+		return undeployOk;
 	}
 	
 	public ArrayList<CommandAPDU> splitPayload(byte commandCLA, byte commandINS, byte[] payload, byte p2) {		

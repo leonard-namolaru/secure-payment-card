@@ -2,13 +2,11 @@ import { Dispatch, SetStateAction, useState } from 'react'
 
 import Header from '@renderer/components/Header'
 import Divider from '@renderer/components/Divider'
-import LandingPage from '@renderer/components/LandingPage'
 import Authentication from '@renderer/components/Authentication'
 import ClientInterface from '@renderer/components/ClientInterface'
 import SessionInterface from '@renderer/components/SessionInterface'
 
-export const USER_PIN_LENGTH: number = 6;
-
+export const SECURE_PAYMENT_CARD_DEFAULT_ID = 'CARD-00000000-000000-00000';
 export const PIN_SEPARATOR_CHAR: string = ",";
 export const GUI_SEPARATOR_CHAR: string = "|";
 export const CLIENT_SEPARATOR_CHAR: string = ':';
@@ -36,16 +34,18 @@ interface SetAppElementsObject {
   setEmail: setState<string>
   setLogs: setState<string[]>
   setBalance: setState<number>
+  setPinStr: setState<string[]>
   setPassword: setState<string>
   setConnected: setState<boolean>
+  setShowPinInput: setState<boolean>
   setAuthenticated: setState<boolean>
   setSessionStarted: setState<boolean>
   setTransactionMode: setState<string>
+  setStartSessionMode: setState<boolean>
   setSecurePaymentCardID: setState<string>
   setTransactionAmountAsStr: setState<string>
   setWebSocketObject: setState<Nullable<WebSocket>>
 }
-
 
 function reset(setAppElementsObject: SetAppElementsObject): void {
   setAppElementsObject.setLogs([]);
@@ -59,8 +59,12 @@ function reset(setAppElementsObject: SetAppElementsObject): void {
   setAppElementsObject.setEmail('')
   setAppElementsObject.setPassword('')
   setAppElementsObject.setTransactionMode('')
-  setAppElementsObject.setSecurePaymentCardID('')
+  setAppElementsObject.setSecurePaymentCardID(SECURE_PAYMENT_CARD_DEFAULT_ID)
   setAppElementsObject.setTransactionAmountAsStr('')
+
+  setAppElementsObject.setStartSessionMode(false);
+  setAppElementsObject.setShowPinInput(false);
+  setAppElementsObject.setPinStr(['', '', '', '', '', '']);
 }
 
 
@@ -160,7 +164,9 @@ function App(): React.JSX.Element {
   const [password, setPassword] = useState<string>('')
 
   const [balance, setBalance] = useState<number>(-1)
-  const [securePaymentCardID, setSecurePaymentCardID] = useState<string>('')
+  const [securePaymentCardID, setSecurePaymentCardID] = useState<string>(
+    SECURE_PAYMENT_CARD_DEFAULT_ID
+  )
 
   const [startSessionMode, setStartSessionMode] = useState<boolean>(false)
   const [showPinInput, setShowPinInput] = useState<boolean>(false)
@@ -186,7 +192,10 @@ function App(): React.JSX.Element {
     setTransactionMode: setTransactionMode,
     setWebSocketObject: setWebSocketObject,
     setSecurePaymentCardID: setSecurePaymentCardID,
-    setTransactionAmountAsStr: setTransactionAmountAsStr
+    setTransactionAmountAsStr: setTransactionAmountAsStr,
+    setStartSessionMode: setStartSessionMode,
+    setShowPinInput: setShowPinInput,
+    setPinStr: setPinStr
   }
 
   return (
@@ -203,7 +212,6 @@ function App(): React.JSX.Element {
       />
 
       <Divider />
-      {!connected ? <LandingPage /> : <></>}
 
       {webSocketObject !== null && connected && !authenticated ? (
         <Authentication
@@ -220,6 +228,8 @@ function App(): React.JSX.Element {
 
       {webSocketObject !== null && connected && authenticated ? (
         <ClientInterface
+          setBalance={setBalance}
+          setSecurePaymentCardID={setSecurePaymentCardID}
           startSessionMode={startSessionMode}
           pinStr={pinStr}
           balance={balance}

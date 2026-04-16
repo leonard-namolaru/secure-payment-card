@@ -4,6 +4,7 @@ import {
   GUI_SEPARATOR_CHAR,
   INSTALL_PIN,
   PIN_SEPARATOR_CHAR,
+  SECURE_PAYMENT_CARD_DEFAULT_ID,
   setState,
   UNINSTALL
 } from '@renderer/App'
@@ -22,6 +23,8 @@ interface ClientInterfacePropos {
   setShowPinInput: setState<boolean>
   setSessionStarted: setState<boolean>
   setAuthenticated: setState<boolean>
+  setBalance: setState<number>
+  setSecurePaymentCardID: setState<string>
 }
 
 interface UserPin {
@@ -108,6 +111,8 @@ function ClientInterface({
   setShowPinInput,
   setSessionStarted,
   setAuthenticated,
+  setBalance,
+  setSecurePaymentCardID
 }: ClientInterfacePropos): React.JSX.Element {
   return (
     <>
@@ -121,11 +126,7 @@ function ClientInterface({
               style={{ width: 800, height: 250, background: '#afc5df !important' }}
             >
               <div className="card-img-overlay">
-                <h5 className="card-title">
-                  {securePaymentCardID.length > 0
-                    ? securePaymentCardID
-                    : 'CARD-00000000-000000-00000'}
-                </h5>
+                <h5 className="card-title">{securePaymentCardID}</h5>
                 <p className="card-text">
                   {balance >= 0 ? `Solde : ${balance}` : `Solde : -`}
                   <br />
@@ -144,6 +145,7 @@ function ClientInterface({
                 type="button"
                 className="btn btn-outline-success btn-lg px-4"
                 onClick={() => {
+
                   setStartSessionMode(false)
                   setPinStr(['', '', '', '', '', ''])
                   setShowPinInput(true)
@@ -155,6 +157,9 @@ function ClientInterface({
                 type="button"
                 className={`btn btn${!sessionStarted ? '-outline' : ''}-warning btn-lg px-4`}
                 onClick={() => {
+                  setBalance(-1);
+                  setSecurePaymentCardID(SECURE_PAYMENT_CARD_DEFAULT_ID);
+
                   setStartSessionMode(true)
                   if (!sessionStarted) {
                     setPinStr(['', '', '', '', '', ''])
@@ -169,6 +174,8 @@ function ClientInterface({
                 className="btn btn-outline-danger btn-lg px-4"
                 onClick={() => {
                   setStartSessionMode(false)
+                  setBalance(-1)
+                  setSecurePaymentCardID(SECURE_PAYMENT_CARD_DEFAULT_ID)
                   uninstall(webSocket, setSessionStarted)
                 }}
               >
@@ -178,6 +185,8 @@ function ClientInterface({
                 type="button"
                 className="btn btn-outline-dark btn-lg px-4"
                 onClick={() => {
+                  setBalance(-1)
+                  setSecurePaymentCardID(SECURE_PAYMENT_CARD_DEFAULT_ID)
                   closeClientInterface(webSocket, setSessionStarted, setAuthenticated)
                 }}
               >
@@ -197,7 +206,7 @@ function ClientInterface({
               <div className="input-group">
                 {pinStr.map((value: string, index: number) => (
                   <input
-                    type="text"
+                    type="password"
                     className="form-control text-center"
                     key={index}
                     defaultValue={value}

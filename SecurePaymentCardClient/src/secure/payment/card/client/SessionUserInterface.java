@@ -1,5 +1,8 @@
 package secure.payment.card.client;
 
+import java.util.ArrayList;
+import java.io.ByteArrayInputStream;
+
 import javax.crypto.Cipher;
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
@@ -7,18 +10,16 @@ import javax.smartcardio.ResponseAPDU;
 import java.security.Key;
 import java.security.KeyPair;
 import java.security.Signature;
+import java.security.SecureRandom;
 import java.security.SignatureException;
-import java.io.ByteArrayInputStream;
 import java.security.InvalidKeyException;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
-import java.util.ArrayList;
+import java.security.cert.CertificateFactory;
 import java.security.interfaces.ECPrivateKey;
 import java.security.NoSuchProviderException;
-import java.security.SecureRandom;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
 
 import secure.payment.card.client.JsonPayload.OperationResult;
 import secure.payment.card.client.JsonPayload.SecurePaymentCardRecord;
@@ -59,14 +60,14 @@ public abstract class SessionUserInterface implements UserInterface {
 		this.cardSignatureObject = Crypto.setSignatureAlgorithm();
 		this.clientSignatureObject = Crypto.setSignatureAlgorithm();
 		if (cardSignatureObject == null || clientSignatureObject == null) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			sendMessageToUser("Échec de l'initialisation de l'algorithme de signature.");
+			throw new RuntimeException();	
 		}
 		
 		sendMessageToUserIfVerbose("Envoi de la commande SELECT à la carte");
 		if (!selectApplet()) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			sendMessageToUser("Échec de la commande SELECT.");
+			throw new RuntimeException();	
 		}
 		
 		sendMessageToUserIfVerbose("Echange de certificats");
@@ -76,75 +77,75 @@ public abstract class SessionUserInterface implements UserInterface {
 			sendMessageToUser("L'échange de certificats a été effectué avec succès.");
 		} else {
 			sendMessageToUser("L'échange de certificats a échoué.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			throw new RuntimeException();	
 		}
 		
 		sendMessageToUserIfVerbose("Authentification du client et de la carte");
-		if (sendAndGetchallenge()) {
+		if (sendAndGetChallenge()) {
 			sendMessageToUser("L'authentification a réussi.");
 		} else {
 			sendMessageToUser("L'authentification a échoué.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			throw new RuntimeException();	
 		}
 		
 		sendMessageToUserIfVerbose("Génération d'une clé partagée");
 		this.aesKey = generateSharedKey();
 		if(this.aesKey == null) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			sendMessageToUser("Échec de la génération de la clé partagée.");
+			throw new RuntimeException();		
 		}
 		
 		this.aesCipherDecryptObject = Crypto.initCipherObject(Cipher.DECRYPT_MODE, aesKey);
 		if(this.aesCipherDecryptObject == null) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
+			sendMessageToUser("Échec de l'initialisation du mécanisme de déchiffrement.");
 			sendMessageToUserIfDebug("Échec de l'initialisation de l'objet Cipher avec l'état Cipher.DECRYPT_MODE");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			throw new RuntimeException();		
 		}
 		
 		this.aesCipherEncryptObject = Crypto.initCipherObject(Cipher.ENCRYPT_MODE, aesKey);
 		if(this.aesCipherEncryptObject == null) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
+			sendMessageToUser("Échec de l'initialisation du mécanisme de chiffrement.");
 			sendMessageToUserIfDebug("Échec de l'initialisation de l'objet Cipher avec l'état Cipher.ENCRYPT_MODE");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			throw new RuntimeException();		
 		}
 		
-		sendMessageToUserIfVerbose("Obtention de la clé publique de la carte");
+		sendMessageToUserIfVerbose("Obtention de la clé publique de la carte (pour les signatures)");
 		this.cardPublicKey = getCardPublicKey();
 		if (cardPublicKey == null) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			sendMessageToUser("Impossible d'obtenir la clé publique de la carte.");
+			throw new RuntimeException();		
 		}
 		
 		this.clientKeyPair = generateServerKeyPair();
 		
-		sendMessageToUserIfVerbose("Envoi de la clé publique du client");
+		sendMessageToUserIfVerbose("Envoi de la clé publique du client (pour les signatures)");
 		if(!sendClientPublicKey()) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			sendMessageToUser("Impossible d'envoyer la clé publique du client à la carte.");
+			throw new RuntimeException();		
 		}
 		
 		if(!Crypto.signatureInitVerify(cardSignatureObject, cardPublicKey)) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			sendMessageToUser("Le mécanisme de vérification des signatures de la carte n'a pas pu être initialisé.");
+			throw new RuntimeException();		
 		}
 
 		if(!Crypto.signatureInitSign(clientSignatureObject, (ECPrivateKey) clientKeyPair.getPrivate())) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			sendMessageToUser("Le mécanisme de génération des signatures du client n'a pas pu être initialisé.");
+			throw new RuntimeException();		
 		}
 		
 		sendMessageToUserIfVerbose("Vérification du code PIN de l'utilisateur");
 		byte[] pin = this.getUserPin();
 		if (!verifyUserPin(pin)) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			sendMessageToUser("Échec de la vérification du code PIN.");
+			throw new RuntimeException();		
 		}
 		
 		sendMessageToUserIfVerbose("Obtention de l'ID de la carte");
 		byte[] securePayementCardIdBytes = getSecurePayementCardID();
 		if(securePayementCardIdBytes == null) {
-			sendMessageToUser("Une erreur inattendue s'est produite.");
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			sendMessageToUser("Il n'a pas été possible d'obtenir l'ID de la carte.");
+			throw new RuntimeException();		
 		}
 		
 		sendMessageToUserIfVerbose("\n");
@@ -152,7 +153,7 @@ public abstract class SessionUserInterface implements UserInterface {
 		sendMessageToUser(String.format("ID : %s\n", securePayementCardID));
 		
 		if (!setAndVerifyInitialBalance()) {
-			System.exit(SecurePaymentCardConstants.EXIT_FAILURE);	
+			throw new RuntimeException();		
 		}
 		
 		sendMessageToUser("Solde : " + balance);
@@ -182,7 +183,7 @@ public abstract class SessionUserInterface implements UserInterface {
 		return null;
 	}
 	
-	private boolean sendAndGetchallenge() {
+	private boolean sendAndGetChallenge() {
 		boolean authenticationResult = true;
 		
 	      SecureRandom random = new SecureRandom();
@@ -224,8 +225,14 @@ public abstract class SessionUserInterface implements UserInterface {
 	private Key generateSharedKey() {
 		antiReplayAttacksCounter++;
 		
-		KeyPair keyPair = Crypto.generateKeyPair();
-		byte[] encodedPublicKey = Crypto.getByteArrayFromPublicKey((ECPublicKey) keyPair.getPublic());	
+		int i = 0;
+		KeyPair keyPair = null;
+		byte[] encodedPublicKey = null;
+		while (encodedPublicKey == null && i < 5) {
+			keyPair = Crypto.generateKeyPair();
+			encodedPublicKey = Crypto.getByteArrayFromPublicKey((ECPublicKey) keyPair.getPublic(), this);	
+			i++;
+		}
 				
 		byte[] encodedPublicKeyWithCounter = new byte[encodedPublicKey.length + 1];
 		System.arraycopy(encodedPublicKey, 0, encodedPublicKeyWithCounter, 0, encodedPublicKey.length);
@@ -236,7 +243,6 @@ public abstract class SessionUserInterface implements UserInterface {
 			rsaSignatureSign.update(encodedPublicKeyWithCounter);
 			signature = rsaSignatureSign.sign();
 		} catch (SignatureException e) {
-			System.out.println("1 " + e.getMessage());
 			return null;
 		}
 		
@@ -258,11 +264,10 @@ public abstract class SessionUserInterface implements UserInterface {
 				rsaSignatureVerify.initVerify(cardCertificate);
 				rsaSignatureVerify.update(message);
 				if (!rsaSignatureVerify.verify(messageSignature)) {
-					System.out.println("2 ");
 					return null;
 				}
 			} catch (SignatureException | InvalidKeyException e) {
-				System.out.println("3 " + e.getMessage());
+				return null;
 			}
 			
 			byte[] cardPublicKeyByteArray = new byte[65];
@@ -372,7 +377,11 @@ public abstract class SessionUserInterface implements UserInterface {
 		sendMessageToUserIfVerbose("Mise à jour de la signature du solde, "
 				+ "ainsi que de la clé publique, auprès du serveur");
 		
-		byte[] publicKey = Crypto.getByteArrayFromPublicKey((ECPublicKey) clientKeyPair.getPublic());
+		byte[] publicKey = Crypto.getByteArrayFromPublicKey((ECPublicKey) clientKeyPair.getPublic(), this);
+		if (publicKey == null) {
+			return false;
+		}
+		
 		HttpResponseBodyUnionType<OperationResult> httpResponse = 
 				serverCommunicationChannel.updateSecurePaymentCardRecord(securePayementCardID, publicKey, balanceSignature);
 		if (!httpResponse.isError()) {

@@ -11,7 +11,7 @@ SecurePaymentCard/deliverables
 SecurePaymentCard/configurations
 
 securePaymentCardGraphicalInterface/node_modules
-# securePaymentCardGraphicalInterface/dist
+securePaymentCardGraphicalInterface/dist
 securePaymentCardGraphicalInterface/out
 securePaymentCardGraphicalInterface/.DS_Store
 securePaymentCardGraphicalInterface/.eslintcache

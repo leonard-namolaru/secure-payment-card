@@ -195,7 +195,7 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
         }
     	
         if (!verifyBalance()) {
-            ISOException.throwIt((short) 0x009);
+            ISOException.throwIt(ISO7816.SW_DATA_INVALID);
         }
     	
     	byte pinTriesRemaining = ownerPin.getTriesRemaining();
@@ -265,7 +265,7 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
         	}
         
         	if (!verifyBalance()) {
-        		ISOException.throwIt((short) 0x009);
+                ISOException.throwIt(ISO7816.SW_DATA_INVALID);
         	}
         
         	switch (insByte) {
@@ -520,11 +520,11 @@ public class SecurePaymentCard extends Applet /* implements Personalization, App
 
         byte clientCounterValue = decryptedBuffer[dataLength];
         if (clientCounterValue != expectedCounterValue[SecurePaymentCardConstants.MONOTONIC_COUNTER_SIZE - 1]) {
-            ISOException.throwIt((short) (outputLength - 1));
+            ISOException.throwIt(ISO7816.SW_DATA_INVALID);
         }
 
         if (withSignature && !verifySignature(decryptedBuffer, (short) 0, (short) (dataLength + clientCounterSize), (short) (outputLength - dataLength - clientCounterSize))) {
-            ISOException.throwIt((short) 2);
+            ISOException.throwIt(ISO7816.SW_DATA_INVALID);
         }
     	return data;
     }

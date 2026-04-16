@@ -61,7 +61,7 @@ public final class Crypto {
 	
 	private Crypto() {}
 	
-	public static byte[] getByteArrayFromPublicKey(ECPublicKey publicKey) {
+	public static byte[] getByteArrayFromPublicKey(ECPublicKey publicKey, UserInterface userInterface) {
 		BigInteger x = publicKey.getW().getAffineX();
 		BigInteger y = publicKey.getW().getAffineY();		
 		byte[] xBytes = x.toByteArray();
@@ -75,20 +75,11 @@ public final class Crypto {
 			// void java.lang.System.arraycopy( Object src, int srcPos, Object dest, int destPos, int length)
 			System.arraycopy(xBytes, xBytes[0] == 0x00 ? 1 : 0, byteArray, 1, xBytes.length < 32 ? xBytes.length : 32);
 			System.arraycopy(yBytes, yBytes[0] == 0x00 ? 1 : 0, byteArray, 33, yBytes.length < 32 ? yBytes.length : 32);
-			System.out.println(Util.bytesToHex(xBytes));
-			System.out.println(Util.bytesToHex(yBytes));
-			System.out.println(Util.bytesToHex(byteArray));
-			System.out.println(xBytes.length);
-			System.out.println(yBytes.length);
-
 		} catch (Exception e) {
-			e.printStackTrace();
-			System.out.println(Util.bytesToHex(xBytes));
-			System.out.println(Util.bytesToHex(yBytes));
-			System.out.println(e.getMessage());
-			System.out.println(Util.bytesToHex(byteArray));
-			System.out.println(xBytes.length);
-			System.out.println(yBytes.length);
+			userInterface.sendMessageToUserIfDebug("Il semble y avoir un problème avec la taille des tableaux d'octets qui représentent x ou y.");
+			userInterface.sendMessageToUserIfDebug("Taille du tableau d'octets de X : " + xBytes.length);
+			userInterface.sendMessageToUserIfDebug("Taille du tableau d'octets de Y : " + yBytes.length);
+			return null;
 		}
 		
 		return byteArray;
